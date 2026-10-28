@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>RPG Ilhas 3D - Multiplayer & Ferrovias</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0b1d3a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px 16px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 14px;
+            line-height: 1.5;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        #controls-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ddd;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            pointer-events: none;
+            text-align: center;
+        }
+        #action-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 80px;
+            height: 80px;
+            background: #ffcc00;
+            border: none;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 14px;
+            color: #222;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+            cursor: pointer;
+            outline: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s;
+            z-index: 10;
+        }
+        #action-btn:active {
+            transform: scale(0.92);
+        }
+        #joystick-base {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: none;
+            z-index: 10;
+        }
+        #joystick-stick {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        #alert-box {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 20, 60, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <strong>🗺️ RPG Ilhas & Ferrovias</strong><br>
+        Madeira: <span id="wood">10</span> | Pedra: <span id="stone">5</span><br>
+        Minérios: Carvão(<span id="coal">0</span>) Ouro(<span id="gold">0</span>) Diamante(<span id="diamond">0</span>) Petróleo(<span id="oil">0</span>)<br>
+        Clã: <span id="clan">Nenhum</span> | Status: <span id="status">Explorando</span>
+    </div>
+    
+    <div id="alert-box">⚠️ Zona Proibida: Construção proibida a menos de 30 blocos da ferrovia/bilheteria!</div>
+    
+    <div id="controls-hint">PC: WASD para andar | E para Coletar/Cavar | B para Construir Casa</div>
+    
+    <button id="action-btn">COLETAR / CAVAR</button>
+    
+    <div id="joystick-base">
+        <div id="joystick-stick"></div>
+    </div>
+
+    <!-- Importação do Three.js via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script>
+        // Configuração Inicial do Mundo e Jogo
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a75ff); // Oceano
+        scene.fog = new THREE.FogExp2(0x1a75ff, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Luzes
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfffaed, 0.8);
+        dirLight.position.set(100, 150, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Inventário e Recursos
+        const inv = { wood: 10, stone: 5, coal: 0, gold: 0, diamond: 0, oil: 0 };
+        function updateUI() {
+            document.getElementById('wood').innerText = inv.wood;
+            document.getElementById('stone').innerText = inv.stone;
+            document.getElementById('coal').innerText = inv.coal;
+            document.getElementById('gold').innerText = inv.gold;
+            document.getElementById('diamond').innerText = inv.diamond;
+            document.getElementById('oil').innerText = inv.oil;
+        }
+
+        // Criar Chão do Oceano
+        const oceanGeo = new THREE.PlaneGeometry(1000, 1000);
+        const oceanMat = new THREE.MeshStandardMaterial({ color: 0x0055ff, roughness: 0.3 });
+        const ocean = new THREE.Mesh(oceanGeo, oceanMat);
+        ocean.rotation.x = -Math.PI / 2;
+        ocean.position.y = -1;
+        scene.add(ocean);
+
+        // 8 Ilhas Gigantes (Escala 6x)
+        const islandPositions = [
+            { x: -120, z: -120 }, { x: 120, z: -120 },
+            { x: -120, z: 120 },  { x: 120, z: 120 },
+            { x: 0, z: -180 },     { x: 0, z: 180 },
+            { x: -180, z: 0 },     { x: 180, z: 0 }
+        ];
+
+        const islandGroup = new THREE.Group();
+        const islands = [];
+
+        islandPositions.forEach((pos, idx) => {
+            const radius = 60 + Math.random() * 20;
+            const islandGeo = new THREE.CylinderGeometry(radius, radius - 5, 6, 32);
+            const islandMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.8 });
+            const island = new THREE.Mesh(islandGeo, islandMat);
+            island.position.set(pos.x, 2, pos.z);
+            island.receiveShadow = true;
+            islandGroup.add(island);
+            islands.push({ x: pos.x, z: pos.z, radius: radius });
+
+            // Adicionar Árvores e Rochas nas Ilhas
+            for(let i = 0; i < 15; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * (radius - 10);
+                const tx = pos.x + Math.cos(angle) * dist;
+                const tz = pos.z + Math.sin(angle) * dist;
+
+                // Tronco
+                const trunkGeo = new THREE.CylinderGeometry(1.5, 2, 6);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.set(tx, 6, tz);
+                scene.add(trunk);
+
+                // Copa
+                const leavesGeo = new THREE.SphereGeometry(4, 8, 8);
+                const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228b22 });
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.set(tx, 10, tz);
+                scene.add(leaves);
+            }
+        });
+        scene.add(islandGroup);
+
+        // Pontes sobre o Oceano conectando as ilhas centrais
+        const bridgeGeo = new THREE.BoxGeometry(10, 1, 100);
+        const bridgeMat = new THREE.MeshStandardMaterial({ color: 0xa0522d });
+        const bridge1 = new THREE.Mesh(bridgeGeo, bridgeMat);
+        bridge1.position.set(0, 4.5, 0);
+        scene.add(bridge1);
+
+        // --- SISTEMA DE FERROVIA E BILHETERIA ---
+        const railZ = -30; // Posição dos trilhos atravessando o mapa
+        const railGeo = new THREE.BoxGeometry(400, 0.5, 3);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
+        const railway = new THREE.Mesh(railGeo, railMat);
+        railway.position.set(0, 5.2, railZ);
+        scene.add(railway);
+
+        // Bilheteria / Estação
+        const stationGeo = new THREE.BoxGeometry(12, 8, 12);
+        const stationMat = new THREE.MeshStandardMaterial({ color: 0xb22222 });
+        const station = new THREE.Mesh(stationGeo, stationMat);
+        station.position.set(0, 9, railZ - 10);
+        scene.add(station);
+
+        // Trem 3D Animado
+        const trainGeo = new THREE.BoxGeometry(18, 5, 6);
+        const trainMat = new THREE.MeshStandardMaterial({ color: 0xffd700 });
+        const train = new THREE.Mesh(trainGeo, trainMat);
+        train.position.set(-180, 7.5, railZ);
+        scene.add(train);
+
+        let trainX = -180;
+
+        // --- PERSONAGEM 3D ---
+        const playerGroup = new THREE.Group();
+        
+        // Corpo do Jogador
+        const bodyGeo = new THREE.BoxGeometry(2, 4, 1.2);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0044ff });
+        const playerBody = new THREE.Mesh(bodyGeo, bodyMat);
+        playerBody.position.y = 2;
+        playerGroup.add(playerBody);
+
+        // Cabeça
+        const headGeo = new THREE.BoxGeometry(1.4, 1.4, 1.4);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+        const playerHead = new THREE.Mesh(headGeo, headMat);
+        playerHead.position.y = 4.5;
+        playerGroup.add(playerHead);
+
+        // Picareta na mão
+        const pickGeo = new THREE.BoxGeometry(0.4, 2.5, 0.4);
+        const pickMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+        const pickaxe = new THREE.Mesh(pickGeo, pickMat);
+        pickaxe.position.set(1.2, 2, 0.5);
+        playerGroup.add(pickaxe);
+
+        playerGroup.position.set(0, 5, 0);
+        scene.add(playerGroup);
+
+        // Controles de Movimento
+        const keys = { w: false, a: false, s: false, d: false };
+        window.addEventListener('keydown', (e) => {
+            if(e.key.toLowerCase() === 'w') keys.w = true;
+            if(e.key.toLowerCase() === 's') keys.s = true;
+            if(e.key.toLowerCase() === 'a') keys.a = true;
+            if(e.key.toLowerCase() === 'd') keys.d = true;
+            if(e.key.toLowerCase() === 'e') doAction();
+            if(e.key.toLowerCase() === 'b') tryBuildHouse();
+        });
+        window.addEventListener('keyup', (e) => {
+            if(e.key.toLowerCase() === 'w') keys.w = false;
+            if(e.key.toLowerCase() === 's') keys.s = false;
+            if(e.key.toLowerCase() === 'a') keys.a = false;
+            if(e.key.toLowerCase() === 'd') keys.d = false;
+        });
+
+        // Verificação da Regra de 30 Blocos da Ferrovia / Bilheteria
+        function checkRailZone(x, z) {
+            const distRail = Math.abs(z - railZ);
+            const distStation = Math.sqrt(Math.pow(x - 0, 2) + Math.pow(z - (railZ - 10), 2));
+            if (distRail < 30 || distStation < 30) {
+                showAlert();
+                return true; // Proibido construir
+            }
+            return false;
+        }
+
+        function showAlert() {
+            const alertBox = document.getElementById('alert-box');
+            alertBox.style.display = 'block';
+            setTimeout(() => { alertBox.style.display = 'none'; }, 3000);
+        }
+
+        // Ações de Construção e Coleta
+        function tryBuildHouse() {
+            if (checkRailZone(playerGroup.position.x, playerGroup.position.z)) return;
+
+            if (inv.wood >= 5 && inv.stone >= 3) {
+                inv.wood -= 5;
+                inv.stone -= 3;
+                updateUI();
+
+                // Criar casa 3D na ilha
+                const houseGeo = new THREE.BoxGeometry(6, 5, 6);
+                const houseMat = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+                const house = new THREE.Mesh(houseGeo, houseMat);
+                house.position.set(playerGroup.position.x, 7.5, playerGroup.position.z);
+                scene.add(house);
+                document.getElementById('status').innerText = 'Casa construída!';
+            } else {
+                document.getElementById('status').innerText = 'Recursos insuficientes (Req: 5 Madeira, 3 Pedra)';
+            }
+        }
+
+        function doAction() {
+            inv.wood += 2;
+            inv.stone += 1;
+            // Coleta subterrânea simulada (carvão, ouro, diamante, petróleo)
+            inv.coal += Math.random() > 0.5 ? 1 : 0;
+            inv.gold += Math.random() > 0.8 ? 1 : 0;
+            inv.diamond += Math.random() > 0.95 ? 1 : 0;
+            inv.oil += Math.random() > 0.98 ? 1 : 0;
+            updateUI();
+        }
+
+        document.getElementById('action-btn').addEventListener('click', doAction);
+
+        // Loop Principal de Animação e Jogo
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const speed = 25 * delta;
+
+            // Movimentação do Jogador
+            let moveX = 0, moveZ = 0;
+            if (keys.w) moveZ -= speed;
+            if (keys.s) moveZ += speed;
+            if (keys.a) moveX -= speed;
+            if (keys.d) moveX += speed;
+
+            playerGroup.position.x += moveX;
+            playerGroup.position.z += moveZ;
+
+            // Animação do Trem cruzando os trilhos
+            trainX += 30 * delta;
+            if (trainX > 200) trainX = -200;
+            train.position.x = trainX;
+
+            // Câmera em Terceira Pessoa acompanhando o Jogador
+            camera.position.x = playerGroup.position.x;
+            camera.position.y = playerGroup.position.y + 20;
+            camera.position.z = playerGroup.position.z + 25;
+            camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
+
+            renderer.render(scene, camera);
+        }
+
+        // Ajuste de Tela Responsiva
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>
