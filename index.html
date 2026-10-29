@@ -50,6 +50,9 @@
   #hot{left:8px;bottom:206px;transform:none;flex-direction:column;gap:5px;padding:5px}
   .slot.z{opacity:.45}
   #cc{position:fixed;left:0;right:0;bottom:0;max-height:46%;overflow-y:auto;background:#0b1020f0;color:#fff;padding:10px 12px 14px;z-index:10;display:none;border-top:2px solid #ffd34d;font-size:14px}
+  #panel .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+  #panel .row>span{flex:1;font-size:13px}
+  #panel .row>button{width:auto;padding:6px 10px;margin:0}
   #cc .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
   #cc .row>span{width:62px;font-size:12px;color:#ffd34d}
   #cc .sw{width:28px;height:28px;border-radius:50%;border:3px solid #fff4;display:inline-block}
@@ -876,7 +879,7 @@ function invUI() {
 }
 function setUI() {
   const sg = (k, o) => '<div class="seg">' + o.map(([v, n]) => `<button class="${UC[k] === v ? 'on' : ''}" onclick="setCfg('${k}','${v}')">${n}</button>`).join('') + '</div>';
-  document.getElementById('panel').innerHTML = '<h3>⚙️ Configurações</h3><button onclick="closePanel();openCreator()">🎨 Personagem</button><b>Controle de movimento</b>' + sg('ctl', [['joy', '🕹️ Analógico'], ['dpad', '✚ Direcional']]) + '<b>Câmera</b>' + sg('cam', [['perto', 'Perto (Minecraft)'], ['normal', 'Normal'], ['longe', 'Longe']]) + '<small>Dica: arraste a tela para girar a câmera.</small><button onclick="closePanel()">Fechar</button>';
+  document.getElementById('panel').innerHTML = '<h3>⚙️ Configurações</h3><button onclick="closePanel();openCreator()">🎨 Personagem</button><button onclick="friendsUI()">👥 Amigos</button><b>Controle de movimento</b>' + sg('ctl', [['joy', '🕹️ Analógico'], ['dpad', '✚ Direcional']]) + '<b>Câmera</b>' + sg('cam', [['perto', 'Perto (Minecraft)'], ['normal', 'Normal'], ['longe', 'Longe']]) + '<small>Dica: arraste a tela para girar a câmera.</small><button onclick="closePanel()">Fechar</button>';
 }
 function setCfg(k, v) { UC[k] = v; try { localStorage.setItem('vikron_cfg', JSON.stringify(UC)); } catch (e) {} if (k === 'cam') camDist = CAMD[v]; applyCfg(); setUI(); }
 function applyCfg() { input.x = input.y = 0; document.getElementById('joy').style.display = UC.ctl === 'joy' ? '' : 'none'; document.getElementById('dpad').style.display = UC.ctl === 'dpad' ? 'grid' : 'none'; }
@@ -961,7 +964,7 @@ function ringFx(p, color, from, to, dur, y = .8) {
 }
 function hpUI() { document.getElementById('hp').firstChild.style.width = Math.max(0, hp / HPMAX * 100) + '%'; }
 function hurt(n, msg = '💥 Você morreu!') {
-  if (dead || window.GOD) return; if (inSafe(player.position.x, player.position.z)) return; if (dashT > 0) return; if (shieldT > 0) n = Math.ceil(n / 2); if (shieldOn && en > 0) { n = Math.max(1, Math.ceil(n * .15)); en = Math.max(0, en - n * 1.2); burst({ x: player.position.x, y: player.position.y + 2, z: player.position.z }, EL().c, 6, 12); }
+  if (dead || window.GOD) return; if (inSafe(player.position.x, player.position.z)) return; if (dashT > 0) return; if (shieldT > 0) n = Math.ceil(n / 2); if (!shieldOn && MP.covered()) { n = Math.max(1, Math.ceil(n * .15)); burst({ x: player.position.x, y: player.position.y + 2, z: player.position.z }, EL().c, 5, 10); } if (shieldOn && en > 0) { n = Math.max(1, Math.ceil(n * .15)); en = Math.max(0, en - n * 1.2); burst({ x: player.position.x, y: player.position.y + 2, z: player.position.z }, EL().c, 6, 12); }
   n = Math.max(1, Math.ceil(n * VEST[(profile && profile.vest) || 0]));
   hp -= n; dmgText(player.position, '-' + n, '#ff6b5a'); hpUI(); if (hp <= 0) drown(msg);
 }
@@ -1098,6 +1101,7 @@ function fireGround(px, py) {
   player.rotation.y = Math.atan2(x - P.x, z - P.z); en -= 10; cdT = .5; const E = EL(); swing(null, () => projectile('orb', skillDmg(), E.c), { x, z });
 }
 function attack() {
+  if (selfPara > 0) return flash('⚡ Paralisado!');
   if (inSafe(player.position.x, player.position.z)) return flash('🕶️ Zona segura: sem combate'.replace('🕶️', '🕊️'));
   const E = EL(), tg = autoAim(SK === 1 ? 110 : 18);
   cdT = SK === 1 ? .5 : SK === 3 ? .38 : .42;
@@ -1175,14 +1179,14 @@ function useItem(k) {
   if (dead || !profile) return; if (itemCd > 0) return; if (inv[k] <= 0) return flash(ITM[k].e + ' Sem ' + ITM[k].n + ': compre no Armazém ou Arsenal');
   const P = player.position;
   if (k === 'heal') { if (hp >= HPMAX) return flash('Vida cheia'); inv[k]--; heal(60); ringFx(P, 0x7dff8a, 2, 14, .5, 1.2); }
-  else if (k === 'aheal') { inv[k]--; heal(45); ringFx(P, 0x7dff8a, 3, 30, .8, 1.2); burst(P, 0x7dff8a, 14, 14); flash('💖 Cura em área (aliados a 25 m)'); }
+  else if (k === 'aheal') { inv[k]--; heal(45); ringFx(P, 0x7dff8a, 3, 30, .8, 1.2); burst(P, 0x7dff8a, 14, 14); MP.send('ah', { x: P.x, z: P.z, r: 25, c: profile.cls }); flash('💖 Cura em área (aliados a 25 m)'); }
   else if (k === 'invis') { inv[k]--; invisT = 20; setPOpa(.25); if (nameSprite) nameSprite.visible = false; flash('👻 Invisível por 20 s'); }
   else if (k === 'fly') { inv[k]--; flyT = 15; flash('🕊️ Voando por 15 s'); }
   else if (k === 'gren') { if (inSafe(P.x, P.z)) return flash('🕊️ Zona segura: sem combate'); inv[k]--; throwGren(); }
   itemCd = .8; refresh(); saveSoon();
 }
 const PARA_MAX = 30;
-function rivalPlayersNear(x, z, r) { return []; } // multiplayer: devolve jogadores de clãs rivais na área
+function rivalPlayersNear(x, z, r) { return MP.rivals(x, z, r); }
 function paralyze(o, sec) { o.para = sec; const p = o.g ? o.g.position : o.position; dmgText({ x: p.x, y: p.y + 4, z: p.z }, 'Paralisado!', '#c79bff'); }
 function throwGren() {
   const P = player.position, [fx_, fz_] = fwd(); let tx = P.x + fx_ * 34, tz = P.z + fz_ * 34;
@@ -1194,7 +1198,7 @@ function boomGren(x, z) {
   const R = 24; ringFx({ x, z }, 0xb06cff, 3, R, .5, 1); ringFx({ x, z }, 0xffffff, 2, R * .6, .35, 2); burst({ x, y: CFG.top, z }, 0xb06cff, 22, 26); let n = 0;
   for (const d of dummies) if (d.alive && Math.hypot(d.g.position.x - x, d.g.position.z - z) < R) { paralyze(d, 6); n++; }
   for (const d of DRAGONS) if (d.state !== 'dead' && Math.hypot(d.g.position.x - x, d.g.position.z - z) < R + 12) { paralyze(d, 6); n++; }
-  for (const pl of rivalPlayersNear(x, z, R).slice(0, PARA_MAX)) { paralyze(pl, 6); n++; }
+  { const rv = rivalPlayersNear(x, z, R).slice(0, PARA_MAX); for (const pl of rv) { paralyze(pl, 6); n++; } if (rv.length) MP.send('gr', { t: rv.map(q => q.uid), s: 6 }); }
   flash(n ? '💣 Paralisou ' + n + ' alvo(s)' : '💣 Granada explodiu'); camShake = Math.max(camShake, .3);
 }
 function itemTick(dt) {
@@ -2285,6 +2289,153 @@ function respawn() {
   flash(atHome ? '🏠 Você renasceu em casa' : 'Você renasceu em um lugar aleatório');
 }
 
+
+// ================= MULTIPLAYER (Supabase Realtime · sem SQL) =================
+let selfPara = 0;
+const MPesc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MP = {
+  ch: null, ok: false, R: new Map(), fr: {}, req: {}, sendT: 0, n: 0, startedFor: null,
+  NAME_D: 70, VIS_D: 320, FR_D: 2600, FR_MAX: 6,
+  loadFr() { try { this.fr = JSON.parse(localStorage.getItem('vikron_fr_' + profile.uid) || '{}') || {}; } catch (e) { this.fr = {}; } },
+  saveFr() { try { localStorage.setItem('vikron_fr_' + profile.uid, JSON.stringify(this.fr)); } catch (e) {} },
+  start() {
+    if (this.ch || !Net.on || !Net.sb || !profile || !profile.uid || !Net.user) return;
+    this.startedFor = profile.uid; this.loadFr();
+    try {
+      this.ch = Net.sb.channel('vikron-world', { config: { broadcast: { self: false } } });
+      this.ch.on('broadcast', { event: 'm' }, e => { try { this.onMsg(e.payload); } catch (er) {} });
+      this.ch.subscribe(st => { this.ok = st === 'SUBSCRIBED'; });
+    } catch (e) { this.ch = null; }
+  },
+  send(k, o) { if (!this.ok || !this.ch || !profile) return; o = o || {}; o.k = k; o.u = profile.uid; try { this.ch.send({ type: 'broadcast', event: 'm', payload: o }); } catch (e) {} },
+  isAlly(r) { return r.cls === profile.cls || !!this.fr[r.uid]; },
+  mk(uid) {
+    const T_ = T, L = (c) => new T_.MeshLambertMaterial({ color: c });
+    const r = { uid, name: '?', cls: 'fire', g: new T_.Group(), tx: 0, tz: 0, ty: 0, tr: 0, last: Date.now(), sk: 0, sh: 0, iv: 0, dead: 0, lk: null, hidden: false, ph: 0, mats: {} };
+    const m = r.mats; m.skin = L(0xd8cbb8); m.shirt = L(0xbdbdbd); m.pants = L(0x33384a); m.hair = L(0x2a2a2a); m.band = new T_.MeshBasicMaterial({ color: 0xff6a1a });
+    const add = (geo, mat, x, y, z, p) => { const o = new T_.Mesh(geo, mat); o.position.set(x, y, z); (p || r.g).add(o); return o; };
+    r.legL = new T_.Group(); r.legR = new T_.Group(); r.legL.position.set(-.65, 3.1, 0); r.legR.position.set(.65, 3.1, 0); r.g.add(r.legL, r.legR);
+    for (const lg of [r.legL, r.legR]) add(new T_.CylinderGeometry(.5, .42, 3.1, 8), m.pants, 0, -1.55, 0, lg);
+    add(new T_.CylinderGeometry(1.05, 1.2, 3.1, 10), m.shirt, 0, 4.7, 0);
+    r.armL = new T_.Group(); r.armR = new T_.Group(); r.armL.position.set(-1.45, 5.9, 0); r.armR.position.set(1.45, 5.9, 0); r.g.add(r.armL, r.armR);
+    for (const a of [r.armL, r.armR]) { add(new T_.CylinderGeometry(.4, .36, 2.6, 8), m.shirt, 0, -1.2, 0, a); add(new T_.SphereGeometry(.42, 8, 6), m.skin, 0, -2.6, 0, a); }
+    add(new T_.SphereGeometry(1.25, 14, 12), m.skin, 0, 7.1, 0);
+    r.hairM = add(new T_.SphereGeometry(1.32, 14, 8, 0, Math.PI * 2, 0, Math.PI * .55), m.hair, 0, 7.15, -.05);
+    r.bandM = add(new T_.TorusGeometry(1.28, .12, 6, 18), m.band, 0, 7.45, 0); r.bandM.rotation.x = Math.PI / 2;
+    for (const sx of [-1, 1]) add(new T_.SphereGeometry(.14, 6, 6), new T_.MeshBasicMaterial({ color: 0x111111 }), sx * .45, 7.2, 1.12);
+    r.sh_m = add(new T_.SphereGeometry(6.5, 14, 10), new T_.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: .25, depthWrite: false, blending: T_.AdditiveBlending }), 0, 4.5, 0); r.sh_m.visible = false;
+    r.fyL = add(new T_.SphereGeometry(.9, 8, 6), new T_.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: .85, blending: T_.AdditiveBlending, depthWrite: false }), 0, -2.8, 0, r.armL); r.fyR = r.fyL.clone(); r.fyR.material = r.fyL.material; r.armR.add(r.fyR); r.fyL.visible = r.fyR.visible = false;
+    r.beam = add(new T_.CylinderGeometry(.5, .5, 60, 6, 1, true), new T_.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: .35, depthWrite: false, blending: T_.AdditiveBlending, fog: false }), 0, 34, 0); r.beam.visible = false;
+    scene.add(r.g); r.g.visible = false; return r;
+  },
+  look(r, lk, c) {
+    const E = ELEM[c] || ELEM.fire; r.cls = ELEM[c] ? c : 'fire'; r.mats.band.color.setHex(E.c); r.sh_m.material.color.setHex(E.c); r.fyL.material.color.setHex(E.c);
+    r.lk = lk || r.lk; const l = r.lk || LOOK_DEF, ok = !!(r.lk && r.lk.ok);
+    r.mats.skin.color.setHex(l.skin); r.mats.shirt.color.setHex(ok ? l.shirt : LOOK_DEF.shirt); r.mats.hair.color.setHex(l.hairC); r.hairM.visible = !!l.hair; r.bandM.visible = ok;
+  },
+  nameSpr(r, show) {
+    const txt = (this.fr[r.uid] ? '⭐ ' : '') + r.name;
+    if (!r.ns || r.nsTxt !== txt) {
+      if (r.ns) { r.g.remove(r.ns); r.ns.material.map.dispose(); r.ns.material.dispose(); }
+      const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d'); g.font = 'bold 30px sans-serif'; g.textAlign = 'center';
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 8, 256, 48); g.fillStyle = this.fr[r.uid] ? '#ffe14a' : '#fff'; g.fillText(txt.slice(0, 18), 128, 42);
+      r.ns = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), depthTest: false })); r.ns.position.y = 10; r.ns.scale.set(6.5, 1.6, 1); r.g.add(r.ns); r.nsTxt = txt;
+    }
+    r.ns.visible = show;
+  },
+  drop(r) { scene.remove(r.g); r.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); this.R.delete(r.uid); },
+  onMsg(p) {
+    if (!p || !profile || p.u === profile.uid) return;
+    if (p.k === 'p') {
+      let r = this.R.get(p.u); if (!r) { r = this.mk(p.u); this.R.set(p.u, r); r.g.position.set(p.x, p.y || 0, p.z); r.fresh = true; }
+      r.name = String(p.n || '?').slice(0, 18); r.tx = p.x; r.tz = p.z; r.ty = p.y || 0; r.tr = p.r || 0; r.sk = p.sk | 0; r.sh = p.sh | 0; r.iv = p.iv | 0; r.dead = p.d | 0; r.last = Date.now();
+      if (p.lk || !r.lk || p.c !== r.cls) this.look(r, p.lk || null, p.c);
+      return;
+    }
+    if (p.k === 'ah') { // cura em área de um aliado
+      const a = { cls: p.c, uid: p.u }; if (dead || !this.isAlly(a)) return;
+      if (Math.hypot(player.position.x - p.x, player.position.z - p.z) <= (p.r || 25)) { heal(45); ringFx(player.position, 0x7dff8a, 2, 14, .6, 1.2); burst(player.position, 0x7dff8a, 10, 12); flash('💖 Um aliado curou você'); }
+      return;
+    }
+    if (p.k === 'gr') { // granada de paralisia
+      if (!p.t || p.t.indexOf(profile.uid) < 0 || dead || inSafe(player.position.x, player.position.z)) return;
+      selfPara = Math.max(selfPara, p.s || 6); pending = null; dmgText(player.position, 'Paralisado!', '#c79bff'); flash('⚡ Você foi paralisado por uma granada!'); burst(player.position, 0xc79bff, 14, 14); return;
+    }
+    if (p.k === 'frq') { if (p.to !== profile.uid) return; if (this.fr[p.u]) { this.send('fok', { to: p.u, fn: profile.name }); return; } this.req[p.u] = String(p.fn || '?').slice(0, 18); flash('👥 ' + this.req[p.u] + ' quer ser seu melhor amigo (⚙️ → Amigos)'); if (panelKind === 'friends') friendsUI(); return; }
+    if (p.k === 'fok') { if (p.to !== profile.uid) return; if (Object.keys(this.fr).length < this.FR_MAX) { this.fr[p.u] = String(p.fn || '?').slice(0, 18); this.saveFr(); flash('⭐ ' + this.fr[p.u] + ' agora é seu melhor amigo'); if (panelKind === 'friends') friendsUI(); } return; }
+    if (p.k === 'frm') { if (p.to !== profile.uid) return; if (this.fr[p.u]) { delete this.fr[p.u]; this.saveFr(); if (panelKind === 'friends') friendsUI(); } return; }
+  },
+  covered() { // escudo de um aliado protege até 3 aliados próximos
+    if (!profile) return false; const me = player.position;
+    for (const r of this.R.values()) {
+      if (!r.sh || r.hidden || r.dead || !this.isAlly(r)) continue;
+      const rx = r.g.position.x, rz = r.g.position.z, d0 = Math.hypot(me.x - rx, me.z - rz); if (d0 > 14) continue;
+      const c = [{ id: 'me', d: d0 }];
+      for (const q of this.R.values()) if (q !== r && q.cls === r.cls && !q.dead && !q.hidden) { const d = Math.hypot(q.g.position.x - rx, q.g.position.z - rz); if (d <= 14) c.push({ id: q.uid, d }); }
+      c.sort((a, b) => a.d - b.d); if (c.slice(0, 3).some(e => e.id === 'me')) return true;
+    }
+    return false;
+  },
+  rivals(x, z, rad) {
+    const out = []; if (!profile) return out;
+    for (const r of this.R.values()) { if (r.hidden || r.dead || r.cls === profile.cls || this.fr[r.uid]) continue; if (Math.hypot(r.g.position.x - x, r.g.position.z - z) <= rad) out.push(r); }
+    return out;
+  },
+  tick(dt, t) {
+    if (!this.ch && profile && profile.uid && (this.n = (this.n || 0) + dt) > 2) { this.n = 0; this.start(); }
+    if (selfPara > 0) selfPara = Math.max(0, selfPara - dt);
+    if (!this.ch) return;
+    if (profile && profile.uid !== this.startedFor && this.ch) { try { this.ch.unsubscribe(); } catch (e) {} for (const r of [...this.R.values()]) this.drop(r); this.ch = null; this.ok = false; return; }
+    this.sendT += dt;
+    if (this.ok && this.sendT > .25 && profile) {
+      this.sendT = 0; this.cnt = (this.cnt || 0) + 1; const P = player.position;
+      const o = { n: profile.name, c: profile.cls, x: +P.x.toFixed(1), z: +P.z.toFixed(1), y: +P.y.toFixed(1), r: +player.rotation.y.toFixed(2), sk: SK, sh: (shieldOn && en > 0) ? 1 : 0, iv: invisT > 0 ? 1 : 0, d: dead ? 1 : 0 };
+      if (this.cnt % 12 === 1 && profile.look) o.lk = profile.look; this.send('p', o);
+    }
+    const now = Date.now(), me = player.position;
+    for (const r of [...this.R.values()]) {
+      if (now - r.last > 8000) { this.drop(r); continue; }
+      const g = r.g, k = Math.min(1, dt * 8); if (r.fresh) { g.position.set(r.tx, r.ty, r.tz); r.fresh = false; }
+      const ox = g.position.x, oz = g.position.z; g.position.x += (r.tx - ox) * k; g.position.z += (r.tz - oz) * k; g.position.y += (r.ty - g.position.y) * k;
+      let da = r.tr - g.rotation.y; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2; g.rotation.y += da * Math.min(1, dt * 10);
+      const dist = Math.hypot(g.position.x - me.x, g.position.z - me.z), fr = !!this.fr[r.uid];
+      r.hidden = r.dead || (r.iv && !(fr && dist < 30)) || !(dist < this.VIS_D || (fr && dist < this.FR_D));
+      g.visible = !r.hidden; if (r.hidden) continue;
+      const mv = Math.hypot(r.tx - g.position.x, r.tz - g.position.z) > .3; r.ph += dt * (mv ? 9 : 0);
+      const sw = mv ? Math.sin(r.ph) * .7 : 0; r.legL.rotation.x = sw; r.legR.rotation.x = -sw;
+      if (r.sk === 3) { r.armL.rotation.x = r.armR.rotation.x = -1.2; r.armL.rotation.z = .25; r.armR.rotation.z = -.25; } else { r.armL.rotation.x = -sw * .8; r.armR.rotation.x = sw * .8; r.armL.rotation.z = r.armR.rotation.z = 0; }
+      r.fyL.visible = r.fyR.visible = r.sk === 3; if (r.sk === 3) r.fyL.scale.setScalar(1 + Math.sin(now / 90) * .2);
+      r.sh_m.visible = !!r.sh; if (r.sh) r.sh_m.rotation.y += dt;
+      this.nameSpr(r, dist < this.NAME_D || fr);
+      if (r.ns && fr) { const sc = Math.min(5, Math.max(1, dist / 120)); r.ns.scale.set(6.5 * sc, 1.6 * sc, 1); r.ns.position.y = 10 * Math.min(2.5, sc); } else if (r.ns) { r.ns.scale.set(6.5, 1.6, 1); r.ns.position.y = 10; }
+      r.beam.visible = fr && dist > 120;
+    }
+  }
+};
+function invite(uid) {
+  const r = MP.R.get(uid); if (!r) return; if (MP.fr[uid]) return flash('Já é seu melhor amigo');
+  if (Object.keys(MP.fr).length >= MP.FR_MAX) return flash('Limite de ' + MP.FR_MAX + ' melhores amigos');
+  MP.send('frq', { to: uid, fn: profile.name }); flash('📨 Convite enviado para ' + r.name);
+}
+function acceptFr(uid) {
+  const nm = MP.req[uid]; if (!nm) return; if (Object.keys(MP.fr).length >= MP.FR_MAX) return flash('Limite de ' + MP.FR_MAX + ' melhores amigos');
+  MP.fr[uid] = nm; delete MP.req[uid]; MP.saveFr(); MP.send('fok', { to: uid, fn: profile.name }); flash('⭐ ' + nm + ' agora é seu melhor amigo'); friendsUI();
+}
+function denyFr(uid) { delete MP.req[uid]; friendsUI(); }
+function removeFr(uid) { delete MP.fr[uid]; MP.saveFr(); MP.send('frm', { to: uid }); friendsUI(); }
+function friendsUI() {
+  const p = document.getElementById('panel'); panelKind = 'friends'; p.style.display = 'block';
+  const near = [...MP.R.values()].filter(r => !r.hidden && Math.hypot(r.g.position.x - player.position.x, r.g.position.z - player.position.z) < MP.NAME_D * 1.6 && !MP.fr[r.uid]);
+  const nf = Object.keys(MP.fr).length;
+  let h = '<h3>👥 Melhores amigos (' + nf + '/' + MP.FR_MAX + ')</h3><small>Melhores amigos se veem de longe (nome e feixe de luz). Os demais só aparecem de perto.</small>';
+  h += '<small>' + (MP.ok ? '🌐 Online · ' + (MP.R.size + 1) + ' jogador(es) conectados' : '⏳ Conectando... (precisa estar logado)') + '</small>';
+  for (const u in MP.req) h += '<div class="row"><span>📨 ' + MPesc(MP.req[u]) + '</span><button onclick="acceptFr(\'' + u + '\')">Aceitar</button><button onclick="denyFr(\'' + u + '\')">Recusar</button></div>';
+  for (const u in MP.fr) { const r = MP.R.get(u); h += '<div class="row"><span>⭐ ' + MPesc(MP.fr[u]) + (r ? ' · online' : ' · offline') + '</span><button onclick="removeFr(\'' + u + '\')">Remover</button></div>'; }
+  h += '<b>Perto de você</b>'; if (!near.length) h += '<small>Ninguém por perto.</small>';
+  for (const r of near) h += '<div class="row"><span>' + (ELEM[r.cls] || ELEM.fire).e + ' ' + MPesc(r.name) + '</span><button onclick="invite(\'' + r.uid + '\')">Convidar</button></div>';
+  p.innerHTML = h + '<button onclick="friendsUI()">🔄 Atualizar</button><button onclick="closePanel()">Fechar</button>';
+}
+
 // ================= LOOP =================
 const clock = new T.Clock(); let trainT = 0;
 function loop() {
@@ -2293,6 +2444,7 @@ function loop() {
   mallTick();
   let ix = input.x + (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   let iy = input.y + (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+  if (selfPara > 0) { ix = iy = 0; pending = null; }
   const m = Math.hypot(ix, iy);
   const g0 = walkable(player.position.x, player.position.z);
   if (!dead && m > 0.05) {
@@ -2321,7 +2473,7 @@ function loop() {
   });
   if (waterMat.map) { waterMat.map.offset.x += dt * 0.004; waterMat.map.offset.y += dt * 0.002; }
   animatePlayer(dt, t, (m > 0.05 || autoWalk) && !dead);
-  cdT -= dt; shieldT = Math.max(0, shieldT - dt); interactTick(dt); skillTick(dt); itemTick(dt);
+  cdT -= dt; shieldT = Math.max(0, shieldT - dt); interactTick(dt); skillTick(dt); itemTick(dt); MP.tick(dt, t);
   if (!dead && hp < HPMAX) { hp = Math.min(HPMAX, hp + dt * 1.5); hpUI(); }
   updateDayNight(dt); runFx(dt); updateDummies(dt); updateVilkron(dt, t); updateDragons(dt, t); updateHouses(dt, t); updateMon(t);
   const tp = player.position; camPE += ((holeDepthAt(tp.x, tp.z) >= 2 ? 1.4 : camPitch) - camPE) * Math.min(1, dt * 3);
