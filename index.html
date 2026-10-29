@@ -21,6 +21,15 @@
   #panel{position:fixed;inset:56px 14px 215px;display:none;background:rgba(15,25,40,.95);color:#fff;border-radius:14px;padding:12px;overflow:auto;touch-action:pan-y}
   #panel h3{margin:0 0 8px}#panel button{display:block;width:100%;margin:6px 0;text-align:left}#panel button:disabled{opacity:.4}
   #panel small{display:block;color:#ffd34d;margin-top:2px}
+  #air{position:fixed;top:84px;left:50%;width:150px;margin-left:-75px;height:9px;border-radius:6px;background:#0007;display:none;pointer-events:none}
+  #air i{display:block;height:100%;width:100%;border-radius:6px;background:#4fc3ff}
+  #intro{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(5,20,40,.94);z-index:20;touch-action:pan-y}
+  .card{width:92%;max-width:430px;max-height:96%;overflow:auto;color:#fff;padding:14px}.card h2{margin:0 0 4px}
+  .card input,#panel input{width:100%;padding:10px;border-radius:10px;border:0;font-size:16px;margin:6px 0}
+  .cls{border:2px solid #fff4;border-radius:12px;padding:8px;margin:6px 0}.cls.sel{border-color:#f6c40f;background:#f6c40f22}.cls small{display:block;opacity:.85}
+  .card button{width:100%;padding:12px;border-radius:12px;border:0;background:#f6c40f;font-weight:800;font-size:15px;margin-top:6px}#ierr{color:#ff8a80;min-height:18px}
+  #hp{position:fixed;top:68px;left:50%;width:150px;margin-left:-75px;height:10px;border-radius:6px;background:#0007;pointer-events:none;overflow:hidden}
+  #hp i{display:block;height:100%;width:100%;background:#e0433a}
 </style>
 </head>
 <body>
@@ -33,15 +42,31 @@
 <div id="msg"></div>
 <div id="joy"><div id="knob"></div></div>
 <div id="act">COLETAR<br>/ CAVAR</div>
-<div id="bar"><button onclick="togglePanel()">🔨 Criar</button><button id="modeBtn" onclick="cycleMode()"></button><button id="blkBtn" onclick="cycleBlk()"></button></div>
+<div id="bar"><button onclick="togglePanel()">🔨 Criar</button><button id="modeBtn" onclick="cycleMode()"></button><button id="blkBtn" onclick="cycleBlk()"></button><button id="eqBtn" onclick="cycleEquip()"></button><button onclick="toggleShop()">🏪 Loja</button></div>
 <div id="panel"></div>
+<div id="air"><i></i></div>
+<div id="hp"><i></i></div>
+<div id="intro"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 // ================= CONFIG =================
-const CFG = { centerR: 1500, outerR: 875, ringR: 3500, n: 7, top: 3, railY: 20, bridgeW: 30, speed: 120, sand: 40 };
+const CFG = { centerR: 1500, outerR: 875, ringR: 3500, n: 7, top: 3, railY: 20, bridgeW: 30, speed: 120, sand: 40, shallow: 70 };
 let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const T = THREE;
+const COL = [];
+const addBox = (x, z, hx, hz, rot = 0) => COL.push({ x, z, hx, hz, c: Math.cos(rot), s: Math.sin(rot) });
+const addCirc = (x, z, r) => COL.push({ x, z, r });
+function hitStatic(x, z, r = 1.6) {
+  for (const o of COL) {
+    const dx = x - o.x, dz = z - o.z;
+    if (o.r) { if (dx * dx + dz * dz < (o.r + r) * (o.r + r)) return true; continue; }
+    const lx = dx * o.c - dz * o.s, lz = dx * o.s + dz * o.c;
+    if (Math.abs(lx) < o.hx + r && Math.abs(lz) < o.hz + r) return true;
+  }
+  return false;
+}
+const blockedAt = (x, z) => hitStatic(x, z) || solidAt(x, z);
 const ORE_C = { stone: 0x7d7f86, coal: 0x2b2b2b, copper: 0xc8753a, iron: 0xa8806a, gold: 0xe6c14a, diamond: 0x7fe3f0 };
 function pickOre() { const r = rnd(); return r < .5 ? 'stone' : r < .68 ? 'coal' : r < .8 ? 'copper' : r < .9 ? 'iron' : r < .96 ? 'gold' : 'diamond'; }
 
@@ -71,7 +96,16 @@ const grassMat = L(0x4aa03a); skin('grama.jpg', grassMat, 1 / 500, 0x4aa03a, T.M
 const sandMat = L(0xe9d49b);  skin('areia.jpg', sandMat, 1 / 400, 0xe9d49b, T.MirroredRepeatWrapping);
 const waterMat = L(0x1b77b8); skin('agua.jpg', waterMat, 720, 0x1b77b8, T.RepeatWrapping);
 const cliffMat = L(0x8a7a66), cliffSand = L(0xcdb98a);
-const foamMat = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+skin('casca.jpg', cliffMat, 1 / 140, 0x8a7a66, T.RepeatWrapping);
+const TX = (f, rep, fb) => { const m = L(fb); skin(f, m, rep, fb, T.RepeatWrapping); return m; };
+const woodM = TX('madeira.jpg', 1, 0x9a6a35), woodB = TX('madeira.jpg', 0.3, 0x9a6a35);
+const stoneM = TX('pedra.jpg', 3, 0xb5b0a4), stoneB = TX('pedra.jpg', 0.5, 0x8d8f94);
+const wallM = TX('castelo.jpg', 2, 0xb9b4a8), houseM = TX('terminal.jpg', 1, 0xe0c090);
+const roofBlue = TX('telhado_azul.jpg', 3, 0x4a5fa8), roofRed = TX('telhado_vermelho.jpg', 3, 0xb3392e);
+const trunkTex = TX('casca.jpg', 1, 0x6b4423);
+const oreMat = {}; { const f = { iron: 'ferro', gold: 'ouro', coal: 'carvao', copper: 'cobre', diamond: 'diamante' };
+  for (const k in ORE_C) oreMat[k] = f[k] ? TX('min_' + f[k] + '.jpg', 1, ORE_C[k]) : L(ORE_C[k]); }
+const foamMat = new T.MeshBasicMaterial({ color: 0xaaf0ff, transparent: true, opacity: 0.45 });
 
 const water = new T.Mesh(new T.PlaneGeometry(40000, 40000), waterMat);
 water.rotation.x = -Math.PI / 2; scene.add(water);
@@ -93,7 +127,7 @@ function slab(s, add, depth, y, mats) {
   const m = new T.Mesh(g, mats); m.position.set(s.x, y, s.z); scene.add(m);
 }
 isl.forEach(s => {
-  slab(s, CFG.sand * 2, 0.4, 0.3, foamMat);
+  slab(s, CFG.sand - 8 + CFG.shallow, 0.4, 0.3, foamMat);
   slab(s, CFG.sand, 4, -3, [sandMat, cliffSand]);
   slab(s, 0, 8, -5, [grassMat, cliffMat]);
 });
@@ -101,7 +135,7 @@ isl.forEach(s => {
 // ================= OBJETOS =================
 const nodes = [];
 const trunkG = new T.CylinderGeometry(0.7, 1, 3.5, 6), coneG = new T.ConeGeometry(3.2, 9, 7);
-const trunkM = L(0x6b4423), greens = [L(0x2f8f3a), L(0x1f7a34), L(0x3fa044)];
+const trunkM = trunkTex, greens = [L(0x2f8f3a), L(0x1f7a34), L(0x3fa044)];
 function spot(s, minR, maxF = 0.8) {
   const a = rnd() * Math.PI * 2, d = minR + rnd() * Math.max(1, edge(s, a) * maxF - minR);
   return [s.x + Math.cos(a) * d, s.z + Math.sin(a) * d];
@@ -115,8 +149,8 @@ function addTree(x, z) {
 }
 function addMountain(x, z, big) {
   const h = (big ? 110 : 14) + rnd() * 20, w = (big ? 70 : 8) + rnd() * 8;
-  const ore = pickOre(), m = new T.Mesh(new T.ConeGeometry(w, h, 6), L(ORE_C[ore])); m.position.set(x, CFG.top + h / 2, z); scene.add(m);
-  const sn = new T.Mesh(new T.ConeGeometry(w * 0.3, h * 0.25, 6), L(ore === 'stone' ? 0xf2f2f2 : ORE_C[ore])); sn.position.set(x, CFG.top + h * 0.9, z); scene.add(sn);
+  const ore = pickOre(), m = new T.Mesh(new T.ConeGeometry(w, h, 6), oreMat[ore]); m.position.set(x, CFG.top + h / 2, z); scene.add(m);
+  const sn = new T.Mesh(new T.ConeGeometry(w * 0.3, h * 0.25, 6), (ore === 'stone' ? L(0xf2f2f2) : oreMat[ore])); sn.position.set(x, CFG.top + h * 0.9, z); scene.add(sn);
   nodes.push({ mesh: m, extra: sn, type: 'rock', ore });
 }
 function addOil(x, z) {
@@ -132,16 +166,16 @@ function addCrystals(x, z) {
   g.position.set(x, CFG.top, z); scene.add(g); nodes.push({ mesh: g, type: 'diamond' });
 }
 function addVillage(x, z, n) {
-  const roofs = [0xc4452d, 0xe08a2e, 0x3a64b5, 0xb3392e];
+  const roofs = [roofRed, roofBlue, roofRed, roofBlue];
   for (let i = 0; i < n; i++) {
     const hx = x + (rnd() - .5) * 130, hz = z + (rnd() - .5) * 130, h = new T.Group();
-    const w = new T.Mesh(new T.BoxGeometry(8, 6, 8), L(0xe0c090)); w.position.y = 3;
-    const r = new T.Mesh(new T.ConeGeometry(7, 5, 4), L(roofs[i % 4])); r.position.y = 8.5; r.rotation.y = Math.PI / 4;
+    const w = new T.Mesh(new T.BoxGeometry(8, 6, 8), houseM); w.position.y = 3;
+    const r = new T.Mesh(new T.ConeGeometry(7, 5, 4), roofs[i % 4]); r.position.y = 8.5; r.rotation.y = Math.PI / 4;
     h.add(w, r); h.position.set(hx, CFG.top, hz); h.rotation.y = rnd() * 3; scene.add(h);
   }
 }
 function addRuins(x, z) {
-  const st = L(0xb5b0a2);
+  const st = wallM;
   for (let i = 0; i < 3; i++) {
     const g = new T.Group(), ox = (i - 1) * 22;
     for (const s of [-1, 1]) { const p = new T.Mesh(new T.BoxGeometry(3, 13, 3), st); p.position.set(ox + s * 5, 6.5, 0); g.add(p); }
@@ -151,7 +185,7 @@ function addRuins(x, z) {
 }
 function addDock(s) {
   const a = s.a + 0.35, R = edge(s, Math.atan2(Math.sin(a) * CFG.ringR - s.z, Math.cos(a) * CFG.ringR - s.x));
-  const d = new T.Mesh(new T.BoxGeometry(60, 1.2, 12), L(0x7a5230));
+  const d = new T.Mesh(new T.BoxGeometry(60, 1.2, 12), woodM);
   d.position.set(s.x + Math.cos(s.a) * (R + 40), CFG.top - 1, s.z + Math.sin(s.a) * (R + 40)); d.rotation.y = -s.a; scene.add(d);
 }
 const features = ['ruins', 'village', 'crystal', 'ruins', 'village', 'mountain', 'village'];
@@ -170,19 +204,19 @@ isl.forEach((s, i) => {
 
 // castelo com muralhas
 (function castle() {
-  const c = new T.Group(), st = L(0xb9b4a8), roof = L(0x4a5fa8), roofR = L(0xb3392e);
+  const c = new T.Group(), st = wallM, roof = roofBlue, roofR = roofRed;
   const keep = new T.Mesh(new T.BoxGeometry(36, 32, 36), st); keep.position.y = 16; c.add(keep);
   const top = new T.Mesh(new T.ConeGeometry(16, 20, 4), roof); top.position.y = 42; top.rotation.y = Math.PI / 4; c.add(top);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const tw = new T.Mesh(new T.CylinderGeometry(6, 6.5, 34, 12), st); tw.position.set(sx * 55, 17, sz * 55); c.add(tw);
     const tr = new T.Mesh(new T.ConeGeometry(8.5, 13, 12), roofR); tr.position.set(sx * 55, 40, sz * 55); c.add(tr);
   }
-  for (const s of [-1, 1]) {
-    const w1 = new T.Mesh(new T.BoxGeometry(110, 14, 4), st); w1.position.set(0, 7, s * 55); c.add(w1);
-    const w2 = new T.Mesh(new T.BoxGeometry(4, 14, 110), st); w2.position.set(s * 55, 7, 0); c.add(w2);
-  }
-  const gate = new T.Mesh(new T.BoxGeometry(14, 11, 5), L(0x4a2c14)); gate.position.set(0, 5.5, 55); c.add(gate);
+  const wall = (w, d, x, z) => { const o = new T.Mesh(new T.BoxGeometry(w, 14, d), st); o.position.set(x, 7, z); c.add(o); };
+  wall(110, 4, 0, -55); wall(4, 110, -55, 0); wall(4, 110, 55, 0); wall(48, 4, -31, 55); wall(48, 4, 31, 55);
+  const li = new T.Mesh(new T.BoxGeometry(14, 4, 4), L(0x8a857a)); li.position.set(0, 12, 55); c.add(li);
   c.scale.setScalar(2.5); c.position.y = CFG.top; scene.add(c);
+  addBox(0, 0, 45, 45); addBox(0, -137.5, 140, 5); addBox(-137.5, 0, 5, 140); addBox(137.5, 0, 5, 140); addBox(-77.5, 137.5, 60, 5); addBox(77.5, 137.5, 60, 5);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) addCirc(sx * 137.5, sz * 137.5, 17);
   for (let i = nodes.length - 1; i >= 0; i--) {
     const p = nodes[i].mesh.position;
     if (Math.abs(p.x) < 175 && Math.abs(p.z) < 175) { scene.remove(nodes[i].mesh); if (nodes[i].extra) scene.remove(nodes[i].extra); nodes.splice(i, 1); }
@@ -190,12 +224,12 @@ isl.forEach((s, i) => {
 })();
 
 // pontes de pedra
-const stone = L(0xb5b0a4);
+const stone = stoneM;
 for (let i = 1; i <= CFG.n; i++) {
   const a = isl[i].a, from = 1275, to = 2825, len = to - from, b = new T.Group();
   b.add(new T.Mesh(new T.BoxGeometry(len, 2, CFG.bridgeW), stone));
-  for (const s of [-1, 1]) { const r = new T.Mesh(new T.BoxGeometry(len, 2.5, 1), L(0x9a958a)); r.position.set(0, 2.2, s * CFG.bridgeW / 2); b.add(r); }
-  for (let k = 0; k <= 20; k++) for (const s of [-1, 1]) { const p = new T.Mesh(new T.BoxGeometry(4, 9, 3), L(0x8d8a82)); p.position.set(-len / 2 + k * len / 20, -4, s * (CFG.bridgeW / 2 - 1.5)); b.add(p); }
+  for (const s of [-1, 1]) { const r = new T.Mesh(new T.BoxGeometry(len, 2.5, 1), stoneM); r.position.set(0, 2.2, s * CFG.bridgeW / 2); b.add(r); }
+  for (let k = 0; k <= 20; k++) for (const s of [-1, 1]) { const p = new T.Mesh(new T.BoxGeometry(4, 9, 3), stoneM); p.position.set(-len / 2 + k * len / 20, -4, s * (CFG.bridgeW / 2 - 1.5)); b.add(p); }
   b.position.set(Math.cos(a) * (from + len / 2), CFG.top - 1.2, Math.sin(a) * (from + len / 2)); b.rotation.y = -a; scene.add(b);
 }
 
@@ -219,9 +253,19 @@ for (let i = 0; i < 5; i++) {
     car.add(bo, ch, cab);
   } else {
     const b = new T.Mesh(new T.BoxGeometry(13, 6, 6), L([0xe0a030, 0x2f8f6a, 0xc4452d, 0x3a64b5][i - 1])); b.position.y = 5;
-    const rf = new T.Mesh(new T.BoxGeometry(13.5, 1, 6.5), L(0x4a2c14)); rf.position.y = 8.3; car.add(b, rf);
+    const rf = new T.Mesh(new T.BoxGeometry(13.5, 1, 6.5), woodM); rf.position.y = 8.3; car.add(b, rf);
   }
   scene.add(car); train.push(car);
+}
+
+// ================= TERMINAIS (sólidos e indestrutíveis) =================
+for (let i = 1; i <= CFG.n; i++) {
+  const sI = isl[i], th = -sI.a - Math.PI / 2, g = new T.Group();
+  const add = (w, h, d, c, y) => { const o = new T.Mesh(new T.BoxGeometry(w, h, d), c.isMaterial ? c : L(c)); o.position.y = y; g.add(o); };
+  add(90, 1.2, 40, stoneM, 0.6); add(60, 14, 22, houseM, 7); add(66, 2, 28, roofRed, 15); add(62, 4, 22.4, 0x2a3a4a, 9);
+  g.position.set(sI.x, CFG.top, sI.z); g.rotation.y = th; scene.add(g);
+  addBox(sI.x, sI.z, 30, 11, th);
+  for (let k = nodes.length - 1; k >= 0; k--) { const q = nodes[k].mesh.position; if (Math.hypot(q.x - sI.x, q.z - sI.z) < 60) { scene.remove(nodes[k].mesh); if (nodes[k].extra) scene.remove(nodes[k].extra); nodes.splice(k, 1); } }
 }
 
 // ================= BARCOS E NUVENS =================
@@ -245,15 +289,22 @@ const player = new T.Group();
 const pB = new T.Mesh(new T.BoxGeometry(2.4, 3.2, 1.4), L(0x2d6cdf)); pB.position.y = 3.2;
 const pH = new T.Mesh(new T.BoxGeometry(1.8, 1.8, 1.8), L(0xf1c27d)); pH.position.y = 5.7;
 const pL = new T.Mesh(new T.BoxGeometry(2.2, 1.6, 1.2), L(0x24408a)); pL.position.y = 1;
+function mkArm(x) { const a = new T.Group(); a.position.set(x, 4.6, 0); const m = new T.Mesh(new T.BoxGeometry(0.9, 2.6, 0.9), L(0x2d6cdf)); m.position.y = -1.3; a.hand = new T.Group(); a.hand.position.y = -2.7; a.add(m, a.hand); player.add(a); return a; }
+const armR = mkArm(1.7), armL = mkArm(-1.7);
 player.add(pB, pH, pL); player.position.set(0, CFG.top, 260); scene.add(player);
 
-function walkable(x, z) {
-  for (const s of isl) { const dx = x - s.x, dz = z - s.z; const e = edge(s, Math.atan2(dz, dx)), d = Math.hypot(dx, dz); if (d < e - 4) return 3; if (d < e + CFG.sand - 8) return 1.2; }
+function walkable(x, z) { // 3 grama/ponte · 1.2 areia · 0.4 raso · 0 águas fundas
+  let g = 0;
+  for (const s of isl) {
+    const dx = x - s.x, dz = z - s.z, e = edge(s, Math.atan2(dz, dx)), d = Math.hypot(dx, dz);
+    if (d < e - 4) return 3;
+    if (d < e + CFG.sand - 8) g = Math.max(g, 1.2); else if (d < e + CFG.sand - 8 + CFG.shallow) g = Math.max(g, 0.4);
+  }
   for (let i = 1; i <= CFG.n; i++) {
     const a = isl[i].a, along = x * Math.cos(a) + z * Math.sin(a), perp = -x * Math.sin(a) + z * Math.cos(a);
     if (along > 1250 && along < 2850 && Math.abs(perp) < CFG.bridgeW / 2 - 1) return 3;
   }
-  return 0;
+  return g;
 }
 
 // ================= CONTROLES =================
@@ -270,22 +321,30 @@ joy.addEventListener('pointerdown', e => { joyId = e.pointerId; joy.setPointerCa
 joy.addEventListener('pointermove', e => { if (e.pointerId === joyId) joyMove(e); });
 const joyEnd = e => { if (e.pointerId === joyId) { joyId = null; input.x = input.y = 0; knob.style.transform = ''; } };
 joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
-addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space' || e.code === 'KeyE') collect(); });
+addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') return; keys[e.code] = true; if (e.code === 'Space' || e.code === 'KeyE') collect(); });
 addEventListener('keyup', e => keys[e.code] = false);
 
 // ================= INVENTÁRIO / COLETA / CRIAÇÃO / CONSTRUÇÃO =================
-const ITEMS = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', coal: 'Carvão', iron: 'Ferro', copper: 'Cobre', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo', wheat: 'Trigo' };
-const ICON = { wood: '🪵', stone: '🪨', sand: '🏖️', coal: '⚫', iron: '⛓️', copper: '🟠', gold: '🥇', diamond: '💎', oil: '🛢️', wheat: '🌾' };
+let profile = null, equipped = null, swingT = 0, swingDur = 0.4;
+const CLS = {
+  guerreiro: { n: 'Guerreiro', e: '⚔️', aff: ['sword', 'axe'], d: 'Luta de perto. Afinidade com espadas e machados: mais dano e mais madeira por golpe.' },
+  arqueiro: { n: 'Arqueiro', e: '🏹', aff: ['bow'], d: 'Ataca de longe, ágil e preciso. Afinidade com arcos.' },
+  mago: { n: 'Mago', e: '🔮', aff: ['staff'], d: 'Domina feitiços à distância. Afinidade com cetros mágicos.' },
+  sacerdote: { n: 'Sacerdote', e: '📖', aff: ['book'], d: 'Suporte do grupo: cura e proteção. Afinidade com livros.' },
+  artesao: { n: 'Artesão', e: '⛏️', aff: ['pickaxe', 'hoe'], d: 'Mestre da mineração e do cultivo. Afinidade com picaretas e enxadas.' }
+};
+const ITEMS = { coins: 'Moedas', wood: 'Madeira', stone: 'Pedra', sand: 'Areia', coal: 'Carvão', iron: 'Ferro', copper: 'Cobre', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo', drum: 'Tambor', wheat: 'Trigo' };
+const ICON = { coins: '🪙', wood: '🪵', stone: '🪨', sand: '🏖️', coal: '⚫', iron: '⛓️', copper: '🟠', gold: '🥇', diamond: '💎', oil: '🛢️', drum: '🪣', wheat: '🌾' };
 const inv = {}; for (const k in ITEMS) inv[k] = 0;
 document.getElementById('hud').innerHTML = Object.keys(ITEMS).map(k => `<div class="it">${ICON[k]} <b id="i_${k}">0</b></div>`).join('');
 // ferramentas: tier 0 = nenhuma; 1 madeira, 2 ferro, 3 ouro, 4 diamante
 const TIERS = [['Madeira', { wood: 5 }], ['Ferro', { iron: 3, wood: 2 }], ['Ouro', { gold: 3, wood: 2 }], ['Diamante', { diamond: 3, wood: 2 }]];
-const TOOLS = { pickaxe: ['Picareta', '⛏️'], axe: ['Machado', '🪓'], sword: ['Espada', '⚔️'], hoe: ['Enxada', '🌱'] };
-const tools = { pickaxe: 0, axe: 0, sword: 0, hoe: 0 };
+const TOOLS = { pickaxe: ['Picareta', '⛏️'], axe: ['Machado', '🪓'], sword: ['Espada', '⚔️'], hoe: ['Enxada', '🌱'], bow: ['Arco', '🏹'], staff: ['Cetro', '🔮'], book: ['Livro', '📖'] };
+const tools = { pickaxe: 0, axe: 0, sword: 0, hoe: 0, bow: 0, staff: 0, book: 0 };
 const NEED = { stone: 1, coal: 1, copper: 1, iron: 1, gold: 2, oil: 2, diamond: 3 }; // tier mínimo da picareta
 let flashT;
 function flash(t) { const m = document.getElementById('msg'); m.textContent = t; clearTimeout(flashT); flashT = setTimeout(() => m.textContent = '', 1400); }
-function showTools() { document.getElementById('clan').textContent = '⚔️ Clã: Sem clã · ' + Object.keys(TOOLS).map(t => TOOLS[t][1] + (tools[t] ? TIERS[tools[t] - 1][0] : '—')).join(' '); }
+function showTools() { const c = profile && CLS[profile.cls]; document.getElementById('clan').textContent = (c ? c.e + ' ' + profile.name + ' · ' + c.n : '') + ' · Clã: — ' + Object.keys(TOOLS).filter(t => tools[t]).map(t => TOOLS[t][1] + TIERS[tools[t] - 1][0]).join(' '); }
 function refresh() { for (const k in inv) document.getElementById('i_' + k).textContent = inv[k]; showTools(); }
 function give(k, n = 1) { inv[k] += n; refresh(); flash('+' + n + ' ' + ITEMS[k]); saveSoon(); }
 
@@ -304,9 +363,9 @@ function craft(t) {
   const i = tools[t], c = TIERS[i][1];
   if (!Object.keys(c).every(k => inv[k] >= c[k])) return;
   for (const k in c) inv[k] -= c[k];
-  tools[t]++; refresh(); craftUI(); flash(TOOLS[t][0] + ' de ' + TIERS[i][0] + ' criada!'); saveSoon();
+  tools[t]++; equip(t); refresh(); craftUI(); flash(TOOLS[t][0] + ' de ' + TIERS[i][0] + ' criada!'); saveSoon();
 }
-function togglePanel() { const p = document.getElementById('panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; if (p.style.display === 'block') craftUI(); }
+function togglePanel() { openPanel('craft'); }
 
 // ---- blocos / bases ----
 const G = 4, FARM_T = 30, ME = 'eu';
@@ -314,6 +373,7 @@ const BC = { wood: 0x9a6a35, stone: 0x8d8f94, sand: 0xe3cf8f, farm: 0x5a3b1c }, 
 const BLK = ['wood', 'stone', 'sand', 'farm'], BLKN = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', farm: 'Plantação' };
 const bgeo = new T.BoxGeometry(G, G, G), fgeo = new T.BoxGeometry(G, 0.6, G), bmat = {};
 for (const k in BC) bmat[k] = L(BC[k]);
+bmat.wood = woodB; bmat.stone = stoneB;
 const blocks = new Map(); // dono (owner) já guardado em cada bloco: base para multiplayer/clãs
 const ck = (x, y, z) => x + ',' + y + ',' + z;
 const base = (ix, iz) => walkable(ix * G, iz * G) >= 3 ? 3 : 1.2;
@@ -335,7 +395,7 @@ setInterval(() => { for (const b of blocks.values()) if (b.type === 'farm' && b.
 let mode = 0, blk = 'wood';
 const MODES = ['⛏️ Coletar', '🧱 Construir', '💥 Demolir'], ACT = ['COLETAR<br>/ CAVAR', 'COLOCAR', 'DEMOLIR'];
 function ui() {
-  document.getElementById('modeBtn').textContent = MODES[mode]; document.getElementById('act').innerHTML = ACT[mode];
+  document.getElementById('modeBtn').textContent = MODES[mode]; document.getElementById('act').innerHTML = mode === 0 && COMBAT.includes(equipped) ? ({ sword: 'ATACAR', bow: 'ATIRAR', staff: 'LANÇAR', book: 'CURAR' })[equipped] : ACT[mode];
   const bb = document.getElementById('blkBtn'); bb.style.display = mode === 1 ? '' : 'none'; bb.textContent = 'Bloco: ' + BLKN[blk];
 }
 function cycleMode() { mode = (mode + 1) % 3; ui(); }
@@ -351,12 +411,13 @@ function updateGhost() {
   const t = target(), iy = mode === 2 ? t.iy - 1 : t.iy;
   if (iy < 0) { ghost.visible = false; return; }
   ghost.position.set(t.ix * G, base(t.ix, t.iz) + iy * G + G / 2, t.iz * G);
-  ghost.material.color.set(mode === 2 ? 0xff9933 : (walkable(t.ix * G, t.iz * G) && t.iy < 6 ? 0x66ff66 : 0xff4444));
+  ghost.material.color.set(mode === 2 ? 0xff9933 : (walkable(t.ix * G, t.iz * G) >= 1 && t.iy < 6 && !hitStatic(t.ix * G, t.iz * G, 2.5) ? 0x66ff66 : 0xff4444));
 }
 function place() {
   const t = target(), gy = walkable(t.ix * G, t.iz * G);
-  if (!gy) return flash('Não dá para construir na água');
+  if (gy < 1) return flash('Não dá para construir na água');
   if (t.iy > 5) return flash('Altura máxima');
+  if (hitStatic(t.ix * G, t.iz * G, 2.5)) return flash('Área protegida: não dá para construir aqui');
   if (t.iy < 2 && Math.hypot(t.ix * G - player.position.x, t.iz * G - player.position.z) < 3) return flash('Você está no caminho');
   if (blk === 'farm') {
     if (!tools.hoe) return flash('Precisa de uma enxada (🔨 Criar)');
@@ -367,31 +428,178 @@ function place() {
 function demolish() {
   const t = target(), b = blocks.get(ck(t.ix, t.iy - 1, t.iz));
   if (!b) return flash('Nada para demolir aí');
-  b.hp -= 1 + (b.type === 'wood' ? tools.axe : tools.pickaxe);
+  const tt = b.type === 'wood' ? 'axe' : 'pickaxe'; useTool(tt); b.hp -= Math.ceil((1 + tools[tt]) * aff(tt));
   if (b.hp > 0) return flash('Bloco danificado (' + b.hp + ' restante)');
   blocks.delete(ck(b.ix, b.iy, b.iz)); scene.remove(b.mesh);
   if (b.owner === ME && b.type !== 'farm') { inv[b.type]++; refresh(); }
   flash('Bloco destruído'); saveSoon();
 }
 
-// ---- coleta ----
+// ---- efeitos ----
+const COMBAT = ['sword', 'bow', 'staff', 'book'];
+let hp = 100, shieldT = 0, camShake = 0, pending = null, pendHit = .5, holding = false, cdT = 0;
+const HPMAX = 100, fx = [];
+function runFx(dt) { for (let i = fx.length - 1; i >= 0; i--) if (fx[i](dt) === false) fx.splice(i, 1); }
+const pgeo = new T.BoxGeometry(.7, .7, .7);
+function burst(p, color, n = 8, spd = 14) {
+  const mat = new T.MeshBasicMaterial({ color, transparent: true }), ps = []; let life = .7;
+  for (let i = 0; i < n; i++) { const m = new T.Mesh(pgeo, mat); m.position.set(p.x, p.y + 3, p.z); scene.add(m); ps.push({ m, v: new T.Vector3((Math.random() - .5) * spd, 4 + Math.random() * spd * .7, (Math.random() - .5) * spd) }); }
+  fx.push(dt => { life -= dt; for (const q of ps) { q.v.y -= 40 * dt; q.m.position.addScaledVector(q.v, dt); q.m.scale.setScalar(Math.max(.01, life / .7)); } if (life <= 0) { ps.forEach(q => scene.remove(q.m)); mat.dispose(); return false; } });
+}
+function dmgText(p, txt, col = '#fff') {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64; const g = c.getContext('2d');
+  g.font = 'bold 44px sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeStyle = '#000'; g.strokeText(txt, 64, 46); g.fillStyle = col; g.fillText(txt, 64, 46);
+  const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), transparent: true, depthTest: false })); sp.scale.set(10, 5, 1); sp.position.set(p.x, p.y + 12, p.z); scene.add(sp);
+  let life = 1; fx.push(dt => { life -= dt; sp.position.y += dt * 8; sp.material.opacity = Math.min(1, life * 2); if (life <= 0) { scene.remove(sp); sp.material.map.dispose(); sp.material.dispose(); return false; } });
+}
+function ringFx(p, color, from, to, dur, y = .8) {
+  const m = new T.Mesh(new T.RingGeometry(.85, 1, 40), new T.MeshBasicMaterial({ color, transparent: true, side: T.DoubleSide, opacity: .8 }));
+  m.rotation.x = -Math.PI / 2; m.position.set(p.x, CFG.top + y, p.z); scene.add(m); let t = 0;
+  fx.push(dt => { t += dt / dur; m.scale.setScalar(from + (to - from) * Math.min(1, t)); m.material.opacity = .8 * (1 - t); if (t >= 1) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); return false; } });
+}
+function hpUI() { document.getElementById('hp').firstChild.style.width = Math.max(0, hp / HPMAX * 100) + '%'; }
+function hurt(n, msg = '💥 Você morreu!') {
+  if (dead) return; if (shieldT > 0) n = Math.ceil(n / 2);
+  hp -= n; dmgText(player.position, '-' + n, '#ff6b5a'); hpUI(); if (hp <= 0) drown(msg);
+}
+function heal(n) { hp = Math.min(HPMAX, hp + n); dmgText(player.position, '+' + n, '#7dff8a'); hpUI(); }
+
+// ---- alvos: bonecos de treino ----
+const dummies = [];
+function makeDummy(x, z) {
+  const g = new T.Group(), wd = L(0x6b4423);
+  const post = new T.Mesh(new T.CylinderGeometry(.8, 1, 9, 8), wd); post.position.y = 4.5;
+  const body = new T.Mesh(new T.CylinderGeometry(2.4, 2.8, 5, 10), L(0xd9b36a)); body.position.y = 8;
+  const arms = new T.Mesh(new T.BoxGeometry(9, .9, .9), wd); arms.position.y = 9.5;
+  const head = new T.Mesh(new T.SphereGeometry(1.8, 10, 8), L(0xe8cf92)); head.position.y = 12.6;
+  g.add(post, body, arms, head); g.position.set(x, CFG.top, z); scene.add(g);
+  const d = { g, hp: 60, max: 60, alive: true, t: 0, flash: 0, body, head }; dummies.push(d); return d;
+}
+[[-90, 70], [-90, -70], [90, -70], [90, 70], [0, -100]].forEach(p => makeDummy(p[0], p[1]));
+function hurtDummy(d, n) {
+  if (!d.alive) return; d.hp -= n; d.flash = .15; dmgText(d.g.position, '' + n, '#ffe066'); burst(d.g.position, 0xd9b36a, 5, 10);
+  if (d.hp <= 0) { d.alive = false; d.t = 0; give('coins', 3); }
+}
+function updateDummies(dt) {
+  for (const d of dummies) {
+    if (d.alive) { d.flash = Math.max(0, d.flash - dt); const c = d.flash > 0 ? 0xff5544 : 0xd9b36a; d.body.material.color.set(c); d.g.rotation.z = d.flash > 0 ? Math.sin(d.flash * 80) * .12 : 0; }
+    else { d.t += dt; d.g.rotation.x = Math.min(1.5, d.t * 4); if (d.t > 5) { d.alive = true; d.hp = d.max; d.g.rotation.set(0, 0, 0); d.body.material.color.set(0xd9b36a); } }
+  }
+}
+
+// ---- petróleo: explosão ----
+const oilSpots = [];
+function removeNode(n) { scene.remove(n.mesh); if (n.extra) scene.remove(n.extra); const i = nodes.indexOf(n); if (i >= 0) nodes.splice(i, 1); }
+function reviveOil(x, z) { setTimeout(() => addOil(x, z), 120000); }
+function explodeOil(n) {
+  if (!nodes.includes(n)) return;
+  const p = n.mesh.position.clone(); removeNode(n); reviveOil(p.x, p.z); camShake = 1;
+  const mk = (r, col, dur) => { const m = new T.Mesh(new T.SphereGeometry(1, 16, 12), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: .9 })); m.position.set(p.x, CFG.top + 4, p.z); scene.add(m); let t = 0;
+    fx.push(dt => { t += dt / dur; m.scale.setScalar(2 + r * Math.min(1, t)); m.material.opacity = .9 * (1 - t); if (t >= 1) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); return false; } }); };
+  mk(16, 0xff7a1a, .7); mk(10, 0xffd24a, .45); ringFx(p, 0xffe0a0, 4, 34, .6); burst(p, 0xff8a2a, 26, 30); burst(p, 0x222222, 14, 22);
+  const dp = Math.hypot(player.position.x - p.x, player.position.z - p.z); if (dp < 32) hurt(Math.round(60 * (1 - dp / 32)) + 10, '💥 Você explodiu com o petróleo!');
+  for (const d of dummies) if (Math.hypot(d.g.position.x - p.x, d.g.position.z - p.z) < 40) hurtDummy(d, 80);
+  for (const b of [...blocks.values()]) if (Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z) < 18) { blocks.delete(ck(b.ix, b.iy, b.iz)); scene.remove(b.mesh); }
+  for (const o of [...nodes]) if (o.type === 'oil' && Math.hypot(o.mesh.position.x - p.x, o.mesh.position.z - p.z) < 26) setTimeout(() => explodeOil(o), 250);
+  saveSoon();
+}
+
+// ---- golpes: animação com momento do impacto ----
+const HIT = { sword: .45, axe: .6, pickaxe: .6, hoe: .6, bow: .75, staff: .5, book: .5 };
+const BASE = { sword: 14, bow: 10, staff: 12 }, CD = { sword: .1, bow: .25, staff: .4, book: 2.5 };
+function aff(t) { return profile && CLS[profile.cls].aff.includes(t) ? 1.5 : 1; }
+function dmgOf(t) { return Math.ceil(BASE[t] * (1 + .5 * (tools[t] - 1)) * aff(t)); }
+function swing(t, fn, face) {
+  if (t) equip(t);
+  if (face) player.rotation.y = Math.atan2(face.x - player.position.x, face.z - player.position.z);
+  startSwing(); pending = fn; pendHit = HIT[equipped] || .5;
+}
+function useTool(t) { swing(t, null); }
+function fwd() { return [Math.sin(player.rotation.y), Math.cos(player.rotation.y)]; }
+function foes(oil) { const r = []; for (const d of dummies) if (d.alive) r.push({ o: d, k: 'd', x: d.g.position.x, z: d.g.position.z }); if (oil) for (const n of nodes) if (n.type === 'oil') r.push({ o: n, k: 'o', x: n.mesh.position.x, z: n.mesh.position.z }); return r; }
+function hitFoe(f, dmg) { if (f.k === 'd') hurtDummy(f.o, dmg); else explodeOil(f.o); }
+function autoAim(range) {
+  const [fx_, fz_] = fwd(); let best = null, bd = range;
+  for (const f of foes(false)) { const dx = f.x - player.position.x, dz = f.z - player.position.z, d = Math.hypot(dx, dz); if (d > bd || d < .1) continue; if ((dx * fx_ + dz * fz_) / d < .5) continue; best = f; bd = d; }
+  return best;
+}
+
+// ---- ataques ----
+function projectile(kind, dmg, color) {
+  const [fx_, fz_] = fwd(), dir = new T.Vector3(fx_, 0, fz_), g = new T.Group();
+  if (kind === 'arrow') {
+    const sh = new T.Mesh(new T.CylinderGeometry(.18, .18, 5, 6).rotateX(Math.PI / 2), L(0x6b4423)), tip = new T.Mesh(new T.ConeGeometry(.5, 1.4, 6).rotateX(Math.PI / 2), L(color)); tip.position.z = 3; g.add(sh, tip);
+  } else g.add(new T.Mesh(new T.SphereGeometry(1.2, 12, 10), new T.MeshBasicMaterial({ color })));
+  g.position.set(player.position.x + fx_ * 3, player.position.y + 4.2, player.position.z + fz_ * 3); g.lookAt(g.position.clone().add(dir)); scene.add(g);
+  const spd = kind === 'arrow' ? 230 : 150; let life = kind === 'arrow' ? 1.3 : 1.2, trail = 0;
+  const end = (hitP, f) => {
+    scene.remove(g);
+    if (kind === 'orb') { burst(hitP, color, 14, 20); ringFx(hitP, color, 2, 9, .35, 1.5); for (const q of foes(true)) if (Math.hypot(q.x - hitP.x, q.z - hitP.z) < 10 && q !== f) hitFoe(q, Math.ceil(dmg * .6)); }
+    return false;
+  };
+  fx.push(dt => {
+    g.position.addScaledVector(dir, spd * dt); life -= dt; trail += dt; if (kind === 'orb' && trail > .04) { trail = 0; burst({ x: g.position.x, y: g.position.y - 3, z: g.position.z }, color, 1, 3); }
+    if (life <= 0) return end(g.position, null);
+    if (hitStatic(g.position.x, g.position.z, .5) || solidAt(g.position.x, g.position.z)) { burst({ x: g.position.x, y: g.position.y - 3, z: g.position.z }, 0xcccccc, 4, 8); return end(g.position, null); }
+    for (const f of foes(true)) if (Math.hypot(f.x - g.position.x, f.z - g.position.z) < 5 && g.position.y < CFG.top + 14) { hitFoe(f, dmg); return end(g.position, f); }
+  });
+}
+function attack() {
+  const w = equipped, [fx_, fz_] = fwd();
+  const range = w === 'sword' ? 16 : w === 'bow' ? 130 : w === 'staff' ? 100 : 0, tg = range ? autoAim(range) : null;
+  cdT = HP_CD(w);
+  if (w === 'sword') swing('sword', () => {
+    const [ax, az] = fwd(), P = player.position;
+    const arc = new T.Mesh(new T.RingGeometry(3, 11, 20, 1, -Math.PI / 2 - .8, 1.6).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xfff2c0, transparent: true, opacity: .8, side: T.DoubleSide }));
+    arc.position.set(P.x, P.y + 3, P.z); arc.rotation.y = player.rotation.y; scene.add(arc); let t = 0;
+    fx.push(dt => { t += dt / .25; arc.material.opacity = .8 * (1 - t); arc.scale.setScalar(1 + t * .25); arc.position.set(player.position.x, player.position.y + 3, player.position.z); if (t >= 1) { scene.remove(arc); arc.geometry.dispose(); arc.material.dispose(); return false; } });
+    for (const f of foes(true)) { const dx = f.x - P.x, dz = f.z - P.z, d = Math.hypot(dx, dz); if (d < 13 && (dx * ax + dz * az) / (d || 1) > .1) hitFoe(f, dmgOf('sword')); }
+  }, tg);
+  else if (w === 'bow') swing('bow', () => projectile('arrow', dmgOf('bow'), TCOL[tools.bow - 1]), tg);
+  else if (w === 'staff') swing('staff', () => projectile('orb', dmgOf('staff'), TCOL[tools.staff - 1] === 0x9a6a35 ? 0xb06cff : TCOL[tools.staff - 1]), tg);
+  else if (w === 'book') swing('book', () => {
+    const n = Math.round(25 * (1 + .5 * (tools.book - 1)) * aff('book')); heal(n); shieldT = 4; ringFx(player.position, 0x7dff8a, 2, 18, .7, 1.2); burst(player.position, 0x7dff8a, 12, 10); flash('✨ Curou ' + n + ' e ganhou escudo');
+  });
+}
+function HP_CD(w) { return (WEAPONS[w] ? WEAPONS[w].dur : .4) + (CD[w] || 0); }
+
+// ---- coleta com ferramentas ----
+function shake(n) {
+  if (n.bx === undefined) n.bx = n.mesh.position.x; let t = .22;
+  fx.push(dt => { t -= dt; if (!nodes.includes(n)) return false; if (t <= 0) { n.mesh.position.x = n.bx; return false; } n.mesh.position.x = n.bx + Math.sin(t * 90) * .7; });
+}
 function gather() {
   const P = player.position;
-  for (const b of blocks.values()) if (b.type === 'farm' && b.age >= FARM_T && Math.hypot(b.mesh.position.x - P.x, b.mesh.position.z - P.z) < 7) { b.age = 0; cropVis(b); return give('wheat', 1 + tools.hoe); }
+  for (const b of blocks.values()) if (b.type === 'farm' && b.age >= FARM_T && Math.hypot(b.mesh.position.x - P.x, b.mesh.position.z - P.z) < 7) {
+    swing('hoe', () => { if (!blocks.has(ck(b.ix, b.iy, b.iz)) || b.age < FARM_T) return; b.age = 0; cropVis(b); burst(b.mesh.position, 0xe6c14a, 8, 10); give('wheat', Math.round((1 + tools.hoe) * aff('hoe'))); }, b.mesh.position); return;
+  }
   let best = null, bd = 16;
   for (const n of nodes) { const d = Math.hypot(P.x - n.mesh.position.x, P.z - n.mesh.position.z); if (d < bd) { bd = d; best = n; } }
-  if (!best) { if (walkable(P.x, P.z) < 3) return give('sand', 3); return flash('Nada para coletar por perto'); }
-  if (best.type === 'wood') give('wood', 1 + tools.axe);
-  else {
-    const ore = best.type === 'oil' ? 'oil' : best.type === 'diamond' ? 'diamond' : best.ore, need = NEED[ore];
-    if (tools.pickaxe < need) return flash('Precisa de picareta de ' + TIERS[need - 1][0] + ' ou melhor');
-    give(ore, ore === 'stone' ? 2 + tools.pickaxe : 1 + Math.ceil(tools.pickaxe / 2));
+  if (!best) { const g = walkable(P.x, P.z); if (g >= 1 && g < 3) { swing('hoe', () => { burst(P, 0xe3cf8f, 6, 8); give('sand', 3); }); return; } return flash('Nada para coletar por perto'); }
+  const n = best, pos = n.mesh.position;
+  if (n.type === 'oil') {
+    if (!inv.drum) return flash('Precisa de um Tambor (🏪 Loja) para coletar petróleo');
+    swing(null, () => { if (!nodes.includes(n) || !inv.drum) return; inv.drum--; removeNode(n); reviveOil(pos.x, pos.z); burst(pos, 0x151515, 10, 8); give('oil', 1); }, pos); return;
   }
-  scene.remove(best.mesh); if (best.extra) scene.remove(best.extra);
-  nodes.splice(nodes.indexOf(best), 1);
+  const wood = n.type === 'wood', tt = wood ? 'axe' : 'pickaxe', ore = wood ? null : (n.type === 'diamond' ? 'diamond' : n.ore);
+  if (!wood && tools.pickaxe < NEED[ore]) { swing('pickaxe', null, pos); return flash('Precisa de picareta de ' + TIERS[NEED[ore] - 1][0] + ' ou melhor'); }
+  swing(tt, () => {
+    if (!nodes.includes(n)) return;
+    n.hp = (n.hp === undefined ? (wood ? 3 : 4) : n.hp) - Math.max(1, Math.round((1 + tools[tt]) * aff(tt)));
+    burst(pos, wood ? 0x2f8f3a : ORE_C[ore], 6, 12); shake(n); if (n.hp > 0) return;
+    if (wood) give('wood', Math.round((1 + tools.axe) * aff('axe')));
+    else give(ore, Math.round((ore === 'stone' ? 2 + tools.pickaxe : 1 + Math.ceil(tools.pickaxe / 2)) * aff('pickaxe')));
+    removeNode(n);
+  }, pos);
 }
-function collect() { if (dead) return; if (mode === 0) gather(); else if (mode === 1) place(); else demolish(); }
-document.getElementById('act').addEventListener('pointerdown', e => { e.preventDefault(); collect(); });
+function collect() {
+  if (dead || swingT > 0 || cdT > 0 || !profile) return;
+  if (mode === 0) { if (COMBAT.includes(equipped)) attack(); else gather(); }
+  else if (mode === 1) place(); else demolish();
+}
+const actB = document.getElementById('act');
+actB.addEventListener('pointerdown', e => { e.preventDefault(); holding = true; collect(); });
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => actB.addEventListener(ev, () => holding = false));
 
 // ---- salvar (navegador) ----
 let saveT;
@@ -402,17 +610,138 @@ function load() {
 }
 load(); refresh(); ui();
 
+// ================= CÂMERA GIRATÓRIA =================
+let camYaw = 0, camPitch = 0.7, camDist = 170, camId = null, lx = 0, ly = 0;
+const cv = renderer.domElement;
+cv.addEventListener('pointerdown', e => { if (camId === null) { camId = e.pointerId; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(camId); } });
+cv.addEventListener('pointermove', e => { if (e.pointerId !== camId) return; camYaw -= (e.clientX - lx) * 0.006; camPitch = Math.min(1.25, Math.max(0.25, camPitch + (e.clientY - ly) * 0.004)); lx = e.clientX; ly = e.clientY; });
+const camEnd = e => { if (e.pointerId === camId) camId = null; };
+cv.addEventListener('pointerup', camEnd); cv.addEventListener('pointercancel', camEnd);
+cv.addEventListener('wheel', e => { camDist = Math.min(320, Math.max(70, camDist + e.deltaY * 0.15)); });
+
+// ================= ARMAS EM MÃO + ANIMAÇÕES =================
+const TCOL = [0x9a6a35, 0xc9ced6, 0xf2c230, 0x7fe3f0];
+let heldOrb = null;
+function buildHeld(t, c) {
+  const m = L(c), wd = L(0x6b4423), g = new T.Group();
+  const B = (w, h, d, mat, x, y, z) => { const o = new T.Mesh(new T.BoxGeometry(w, h, d), mat); o.position.set(x, y, z); g.add(o); return o; };
+  if (t === 'sword') { B(.3, 1.2, .3, wd, 0, .4, 0); B(1.5, .25, .4, m, 0, 1.1, 0); B(.4, 3.8, .15, m, 0, 3.1, 0); }
+  if (t === 'axe') { B(.3, 3.6, .3, wd, 0, 1.8, 0); B(1.6, 1.2, .25, m, .7, 3.2, 0); }
+  if (t === 'pickaxe') { B(.3, 3.6, .3, wd, 0, 1.8, 0); B(3.4, .45, .35, m, 0, 3.5, 0); }
+  if (t === 'hoe') { B(.3, 3.6, .3, wd, 0, 1.8, 0); B(1.4, .35, .5, m, .6, 3.6, 0); }
+  if (t === 'bow') { const in_ = new T.Group(); in_.rotation.y = -Math.PI / 2; const b = new T.Mesh(new T.TorusGeometry(1.7, .14, 6, 16, Math.PI), m); b.rotation.z = -Math.PI / 2; const st = new T.Mesh(new T.BoxGeometry(.05, 3.4, .05), L(0xffffff)); in_.add(b, st); g.add(in_); }
+  if (t === 'staff') { B(.2, 5, .2, wd, 0, 1.5, 0); heldOrb = new T.Mesh(new T.SphereGeometry(.7, 12, 8), new T.MeshLambertMaterial({ color: c, emissive: c })); heldOrb.position.y = 4.3; g.add(heldOrb); }
+  if (t === 'book') { B(1.7, .3, 2.2, m, 0, 0, 0); B(1.5, .22, 2, L(0xf4efe0), 0, .12, 0); }
+  return g;
+}
+const WEAPONS = {
+  sword:   { hand: 'R', ir: Math.PI, dur: .35, pose: k => { armR.rotation.x = -1.4; armR.rotation.z = k < 0 ? .8 : 1.1 - 2.2 * k; } },
+  axe:     { hand: 'R', ir: Math.PI, dur: .5,  pose: k => { armR.rotation.x = k < 0 ? -.4 : -3 + 2.6 * k * k; } },
+  pickaxe: { hand: 'R', ir: Math.PI, dur: .45, pose: k => { armR.rotation.x = k < 0 ? -.4 : -2.8 + 2.3 * k * k; } },
+  hoe:     { hand: 'R', ir: Math.PI, dur: .5,  pose: k => { armR.rotation.x = k < 0 ? -.3 : -2.4 + 1.8 * k; } },
+  bow:     { hand: 'L', ir: 1.5, dur: .8, pose: k => { armL.rotation.x = -1.5; armR.rotation.x = -1.4; armR.rotation.z = k < 0 ? 0 : -.9 * Math.sin(Math.PI * Math.min(1, k * 1.2)); } },
+  staff:   { hand: 'R', ir: 1.2, dur: .7, pose: k => { armR.rotation.x = -1.2 - (k < 0 ? 0 : .8 * Math.sin(Math.PI * k)); } },
+  book:    { hand: 'L', ir: .6, dur: .8, pose: k => { armL.rotation.x = -1.2; armL.rotation.z = -.35; armR.rotation.x = k < 0 ? 0 : -1.3 - .3 * Math.sin(k * 9); } }
+};
+function setHeld() {
+  armR.hand.clear(); armL.hand.clear(); heldOrb = null; uiEq();
+  if (!equipped) return;
+  const w = WEAPONS[equipped], g = buildHeld(equipped, TCOL[tools[equipped] - 1]); g.rotation.x = w.ir;
+  (w.hand === 'L' ? armL : armR).hand.add(g);
+}
+function equip(t) { equipped = t && tools[t] ? t : null; setHeld(); }
+function cycleEquip() { const l = [null, ...Object.keys(TOOLS).filter(t => tools[t])]; equipped = l[(l.indexOf(equipped) + 1) % l.length]; setHeld(); }
+function uiEq() { ui(); const b = document.getElementById('eqBtn'); if (b) b.textContent = '✋ ' + (equipped ? TOOLS[equipped][0] : 'Mãos'); }
+function startSwing() { const w = equipped && WEAPONS[equipped]; swingDur = w ? w.dur : .3; swingT = swingDur; }
+function animatePlayer(dt, t, mv) {
+  armR.rotation.set(0, 0, 0); armL.rotation.set(0, 0, 0);
+  const sw = mv ? Math.sin(t * 9) * 0.6 : 0; armR.rotation.x = sw; armL.rotation.x = -sw;
+  pB.position.y = 3.2 + (mv ? Math.abs(Math.sin(t * 9)) * 0.15 : 0);
+  let k = -1; if (swingT > 0) { swingT -= dt; k = Math.max(0, 1 - swingT / swingDur); }
+  const w = equipped && WEAPONS[equipped];
+  if (pending && k >= pendHit) { const f = pending; pending = null; f(); }
+  if (w) w.pose(k); else if (k >= 0) armR.rotation.x = -1.5 + 1.5 * k;
+  if (heldOrb) heldOrb.scale.setScalar(1 + (k >= 0 ? Math.sin(k * Math.PI) * .8 : .1 * Math.sin(t * 4)));
+}
+
+// ================= PERFIL / CLASSES / LOJA =================
+const BUY = { drum: 25 };
+function buy(k) { if (inv.coins < BUY[k]) return flash('Moedas insuficientes'); inv.coins -= BUY[k]; inv[k]++; refresh(); saveSoon(); shopUI(); flash('Comprou 1 ' + ITEMS[k]); }
+const PRICE = { wood: 1, stone: 1, sand: 1, coal: 3, copper: 4, iron: 6, gold: 12, diamond: 40, oil: 15, wheat: 2 };
+const COST_CLASS = 500, COST_NAME = 300, RESERVED = ['admin', 'vikron', 'moderador', 'gm', 'sistema'];
+// Nomes únicos: aqui só vale neste aparelho. Para valer para todos os jogadores, troque claim() por uma transação no servidor (Firebase).
+const NameService = {
+  reg() { try { return JSON.parse(localStorage.getItem('vikron_names') || '{}'); } catch (e) { return {}; } },
+  valid(n) { return /^[A-Za-z0-9_]{3,16}$/.test(n); },
+  async claim(n, uid, old) {
+    const r = this.reg(), k = n.toLowerCase();
+    if (RESERVED.includes(k) || (r[k] && r[k] !== uid)) return false;
+    if (old) delete r[old.toLowerCase()];
+    r[k] = uid; try { localStorage.setItem('vikron_names', JSON.stringify(r)); } catch (e) {} return true;
+  }
+};
+function saveProfile() { try { localStorage.setItem('vikron_profile', JSON.stringify(profile)); } catch (e) {} }
+let nameSprite;
+function setLabel() {
+  if (nameSprite) player.remove(nameSprite);
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
+  g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 8, 256, 48); g.fillStyle = '#fff'; g.fillText(profile.name, 128, 42);
+  nameSprite = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), depthTest: false })); nameSprite.scale.set(14, 3.5, 1); nameSprite.position.y = 10; player.add(nameSprite);
+}
+let chosen = 'guerreiro';
+function introUI() {
+  const el = document.getElementById('intro'); el.style.display = 'flex';
+  el.innerHTML = '<div class="card"><h2>Vikron: The Land of Tomorrow</h2><p>Escolha seu nome e sua classe inicial.</p><input id="nm" maxlength="16" placeholder="Nome (3-16: letras, números, _)">' +
+    Object.keys(CLS).map(k => `<div class="cls ${k === chosen ? 'sel' : ''}" data-k="${k}" onclick="pick('${k}')"><b>${CLS[k].e} ${CLS[k].n}</b><small>${CLS[k].d}</small></div>`).join('') +
+    '<p id="ierr"></p><button onclick="startGame()">Começar aventura</button></div>';
+}
+function pick(k) { chosen = k; document.querySelectorAll('.cls').forEach(e => e.classList.toggle('sel', e.dataset.k === k)); }
+async function startGame() {
+  const n = document.getElementById('nm').value.trim(), err = document.getElementById('ierr');
+  if (!NameService.valid(n)) { err.textContent = 'Nome inválido: use 3 a 16 letras, números ou _'; return; }
+  const uid = 'VK-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+  if (!(await NameService.claim(n, uid))) { err.textContent = 'Esse nome já está em uso. Escolha outro.'; return; }
+  profile = { uid, name: n, cls: chosen }; inv.coins += 20; saveProfile(); save(); setLabel(); refresh();
+  document.getElementById('intro').style.display = 'none';
+}
+let panelKind = '';
+function openPanel(k) { const p = document.getElementById('panel'); if (p.style.display === 'block' && panelKind === k) { p.style.display = 'none'; return; } panelKind = k; p.style.display = 'block'; k === 'craft' ? craftUI() : shopUI(); }
+function toggleShop() { openPanel('shop'); }
+function shopUI() {
+  if (!profile) return;
+  let h = `<h3>🏪 Loja · 🪙 ${inv.coins}</h3><small>ID: ${profile.uid}</small><br><b>Vender recursos</b>`;
+  for (const k in PRICE) if (inv[k] > 0) h += `<button onclick="sell('${k}')">${ICON[k]} Vender ${inv[k]} ${ITEMS[k]}<small>+${inv[k] * PRICE[k]} moedas</small></button>`;
+  h += `<br><b>Comprar</b>` + Object.keys(BUY).map(k => `<button onclick="buy('${k}')">${ICON[k]} ${ITEMS[k]} (vazio)<small>${BUY[k]} 🪙 · necessário para coletar petróleo</small></button>`).join('');
+  h += `<br><b>Trocar de classe</b> (${COST_CLASS} 🪙)`;
+  for (const k in CLS) if (k !== profile.cls) h += `<button onclick="buyClass('${k}')">${CLS[k].e} ${CLS[k].n}<small>${CLS[k].d}</small></button>`;
+  h += `<br><b>Trocar de nome</b> (${COST_NAME} 🪙)<input id="nn" maxlength="16" placeholder="Novo nome"><button onclick="rename()">Comprar novo nome</button><button onclick="openPanel('shop')">Fechar</button>`;
+  document.getElementById('panel').innerHTML = h;
+}
+function sell(k) { inv.coins += inv[k] * PRICE[k]; inv[k] = 0; refresh(); saveSoon(); shopUI(); }
+function buyClass(k) { if (inv.coins < COST_CLASS) return flash('Moedas insuficientes'); inv.coins -= COST_CLASS; profile.cls = k; saveProfile(); refresh(); saveSoon(); shopUI(); flash('Nova classe: ' + CLS[k].n); }
+async function rename() {
+  const n = document.getElementById('nn').value.trim();
+  if (!NameService.valid(n)) return flash('Nome inválido (3-16 letras, números ou _)');
+  if (inv.coins < COST_NAME) return flash('Moedas insuficientes');
+  if (!(await NameService.claim(n, profile.uid, profile.name))) return flash('Esse nome já está em uso');
+  inv.coins -= COST_NAME; profile.name = n; saveProfile(); setLabel(); refresh(); saveSoon(); shopUI(); flash('Nome alterado!');
+}
+try { profile = JSON.parse(localStorage.getItem('vikron_profile') || 'null'); } catch (e) {}
+if (profile) setLabel(); else introUI();
+refresh(); setHeld();
+
 // ================= AFOGAMENTO =================
+let air = 7; const AIR_MAX = 7;
 let dead = false, deadT = 0;
 const splash = new T.Mesh(new T.RingGeometry(2, 3.5, 32), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: T.DoubleSide }));
 splash.rotation.x = -Math.PI / 2; splash.position.y = 0.6; scene.add(splash);
-function drown() {
-  dead = true; deadT = 0; input.x = input.y = 0;
+function drown(msg = '💀 Você se afogou!') {
+  dead = true; deadT = 0; input.x = input.y = 0; pending = null; holding = false;
   splash.position.x = player.position.x; splash.position.z = player.position.z; splash.scale.setScalar(1); splash.material.opacity = 0.8;
-  clearTimeout(flashT); document.getElementById('msg').textContent = '💀 Você se afogou!';
+  clearTimeout(flashT); document.getElementById('msg').textContent = msg;
 }
 function respawn() {
-  dead = false; splash.material.opacity = 0; player.position.set(0, CFG.top, 260); player.rotation.set(0, 0, 0);
+  dead = false; air = AIR_MAX; hp = HPMAX; shieldT = 0; hpUI(); splash.material.opacity = 0; player.position.set(0, CFG.top, 260); player.rotation.set(0, 0, 0);
   flash('Você renasceu no castelo');
 }
 
@@ -424,16 +753,20 @@ function loop() {
   let ix = input.x + (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   let iy = input.y + (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   const m = Math.hypot(ix, iy);
+  const g0 = walkable(player.position.x, player.position.z);
   if (!dead && m > 0.05) {
     if (m > 1) { ix /= m; iy /= m; }
-    const nx = player.position.x + ix * CFG.speed * dt, nz = player.position.z + iy * CFG.speed * dt;
-    if (!solidAt(nx, player.position.z)) player.position.x = nx;
-    if (!solidAt(player.position.x, nz)) player.position.z = nz;
-    player.rotation.y = Math.atan2(ix, iy);
+    const wx = ix * Math.cos(camYaw) + iy * Math.sin(camYaw), wz = -ix * Math.sin(camYaw) + iy * Math.cos(camYaw), sp = CFG.speed * (g0 === 0 ? 0.4 : g0 < 1 ? 0.65 : 1) * (swingT > 0 ? 0.5 : 1);
+    const nx = player.position.x + wx * sp * dt, nz = player.position.z + wz * sp * dt;
+    if (!blockedAt(nx, player.position.z)) player.position.x = nx;
+    if (!blockedAt(player.position.x, nz)) player.position.z = nz;
+    player.rotation.y = Math.atan2(wx, wz);
   }
   if (!dead) {
     const gy = walkable(player.position.x, player.position.z);
-    if (!gy) drown(); else player.position.y += (gy - player.position.y) * Math.min(1, dt * 10);
+    if (gy === 0) { air -= dt; if (air <= 0) drown(); } else air = Math.min(AIR_MAX, air + dt * 4);
+    player.position.y += ((gy || -1.6) - player.position.y) * Math.min(1, dt * 10);
+    const ab = document.getElementById('air'); ab.style.display = air < AIR_MAX ? 'block' : 'none'; ab.firstChild.style.width = (air / AIR_MAX * 100) + '%';
   } else {
     deadT += dt; player.position.y -= dt * 4; player.rotation.y += dt * 3;
     splash.scale.addScalar(dt * 30); splash.material.opacity = Math.max(0, 0.8 - deadT * 0.35);
@@ -451,9 +784,13 @@ function loop() {
     s.g.rotation.y = -s.a - Math.PI / 2; s.g.rotation.z = Math.sin(t * 1.5 + i) * 0.05;
   });
   if (waterMat.map) { waterMat.map.offset.x += dt * 0.004; waterMat.map.offset.y += dt * 0.002; }
-  updateGhost();
+  updateGhost(); animatePlayer(dt, t, m > 0.05 && !dead);
+  cdT -= dt; shieldT = Math.max(0, shieldT - dt); if (holding && mode === 0 && !dead) collect();
+  if (!dead && hp < HPMAX) { hp = Math.min(HPMAX, hp + dt * 1.5); hpUI(); }
+  runFx(dt); updateDummies(dt);
   const tp = player.position;
-  camera.position.lerp(new T.Vector3(tp.x, tp.y + 110, tp.z + 130), 0.08);
+  camera.position.lerp(new T.Vector3(tp.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, tp.y + Math.sin(camPitch) * camDist, tp.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist), 0.12);
+  if (camShake > 0) { camShake = Math.max(0, camShake - dt * 2); camera.position.x += (Math.random() - .5) * camShake * 8; camera.position.y += (Math.random() - .5) * camShake * 8; }
   camera.lookAt(tp.x, tp.y, tp.z);
   renderer.render(scene, camera);
 }
