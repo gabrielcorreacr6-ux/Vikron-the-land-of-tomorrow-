@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Vikron: The Land of Tomorrow</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0b1d3a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px 16px;
+            border-radius: 8px;
+            pointer-events: none;
+            font-size: 14px;
+            line-height: 1.5;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 20;
+        }
+        #controls-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ddd;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            pointer-events: none;
+            text-align: center;
+            z-index: 20;
+        }
+        #action-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 80px;
+            height: 80px;
+            background: #ffcc00;
+            border: none;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 14px;
+            color: #222;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+            cursor: pointer;
+            outline: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s;
+            z-index: 20;
+        }
+        #action-btn:active {
+            transform: scale(0.92);
+        }
+        #joystick-base {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            display: block;
+            z-index: 20;
+            touch-action: none;
+        }
+        #joystick-stick {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        #alert-box {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(220, 20, 60, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <strong>🗺️ Vikron: The Land of Tomorrow</strong><br>
+        Madeira: <span id="wood">10</span> | Pedra: <span id="stone">5</span><br>
+        Minérios: Carvão(<span id="coal">0</span>) Ouro(<span id="gold">0</span>) Diamante(<span id="diamond">0</span>) Petróleo(<span id="oil">0</span>)<br>
+        Clã: <span id="clan">Nenhum</span> | Status: <span id="status">Explorando</span>
+    </div>
+    
+    <div id="alert-box">⚠️ Zona Proibida: Construção proibida a menos de 30 blocos da ferrovia/bilheteria!</div>
+    
+    <div id="controls-hint">Arraste o Joystick esquerdo para andar | Botão amarelo para Coletar</div>
+    
+    <button id="action-btn">COLETAR / CAVAR</button>
+    
+    <div id="joystick-base">
+        <div id="joystick-stick"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x3399ff);
+        scene.fog = new THREE.FogExp2(0x3399ff, 0.0003);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfffaed, 1.0);
+        dirLight.position.set(500, 800, 400);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Texturas carregadas via CDN de alta qualidade para garantir funcionamento imediato no GitHub Pages
+        const textureLoader = new THREE.TextureLoader();
+        
+        const grassTexture = textureLoader.load('https://images.unsplash.com/photo-1533450718592-29d45635f0a9?w=512', (tex) => {
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(6, 6);
+        });
+
+        const waterTexture = textureLoader.load('https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=512', (tex) => {
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(15, 15);
+        });
+
+        const inv = { wood: 10, stone: 5, coal: 0, gold: 0, diamond: 0, oil: 0 };
+        function updateUI() {
+            document.getElementById('wood').innerText = inv.wood;
+            document.getElementById('stone').innerText = inv.stone;
+            document.getElementById('coal').innerText = inv.coal;
+            document.getElementById('gold').innerText = inv.gold;
+            document.getElementById('diamond').innerText = inv.diamond;
+            document.getElementById('oil').innerText = inv.oil;
+        }
+
+        // Oceano
+        const oceanGeo = new THREE.PlaneGeometry(12000, 12000);
+        const oceanMat = new THREE.MeshStandardMaterial({ map: waterTexture, roughness: 0.25 });
+        const ocean = new THREE.Mesh(oceanGeo, oceanMat);
+        ocean.rotation.x = -Math.PI / 2;
+        ocean.position.y = -3;
+        scene.add(ocean);
+
+        const circuitRadius = 900;
+
+        // --- ILHA CENTRAL COM O CASTELO ---
+        const centralIslandGeo = new THREE.CylinderGeometry(280, 250, 14, 32);
+        const centralIslandMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 0.8 });
+        const centralIsland = new THREE.Mesh(centralIslandGeo, centralIslandMat);
+        centralIsland.position.set(0, 2, 0);
+        centralIsland.receiveShadow = true;
+        scene.add(centralIsland);
+
+        const castleBaseGeo = new THREE.BoxGeometry(90, 30, 90);
+        const castleMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5 });
+        const castleBase = new THREE.Mesh(castleBaseGeo, castleMat);
+        castleBase.position.set(0, 22, 0);
+        scene.add(castleBase);
+
+        for (let tx of [-40, 40]) {
+            for (let tz of [-40, 40]) {
+                const towerGeo = new THREE.CylinderGeometry(12, 12, 45, 16);
+                const tower = new THREE.Mesh(towerGeo, castleMat);
+                tower.position.set(tx, 30, tz);
+                scene.add(tower);
+
+                const roofGeo = new THREE.ConeGeometry(16, 20, 16);
+                const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
+                const roof = new THREE.Mesh(roofGeo, roofMat);
+                roof.position.set(tx, 57, tz);
+                scene.add(roof);
+            }
+        }
+
+        // --- AS 7 ILHAS EXTERIORES ---
+        const outerIslandCount = 7;
+        const outerRadius = 320;
+
+        for (let i = 0; i < outerIslandCount; i++) {
+            const angle = (i / outerIslandCount) * Math.PI * 2;
+            const x = Math.cos(angle) * circuitRadius;
+            const z = Math.sin(angle) * circuitRadius;
+
+            const islandGeo = new THREE.CylinderGeometry(outerRadius, outerRadius - 35, 14, 32);
+            const islandMat = new THREE.MeshStandardMaterial({ map: grassTexture, roughness: 0.8 });
+            const island = new THREE.Mesh(islandGeo, islandMat);
+            island.position.set(x, 2, z);
+            island.receiveShadow = true;
+            scene.add(island);
+
+            if (i === 1 || i === 4) {
+                const mountainGeo = new THREE.ConeGeometry(80, 90, 5);
+                const mountainMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.9 });
+                const mountain = new THREE.Mesh(mountainGeo, mountainMat);
+                mountain.position.set(x + 50, 50, z);
+                scene.add(mountain);
+            }
+
+            for(let j = 0; j < 40; j++) {
+                const treeAngle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * (outerRadius - 50);
+                const tx = x + Math.cos(treeAngle) * dist;
+                const tz = z + Math.sin(treeAngle) * dist;
+
+                const trunkGeo = new THREE.CylinderGeometry(3, 4, 14);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.set(tx, 10, tz);
+                scene.add(trunk);
+
+                const leavesGeo = new THREE.ConeGeometry(10, 25, 6);
+                const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1e5631, roughness: 0.6 });
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.set(tx, 26, tz);
+                scene.add(leaves);
+            }
+
+            const bridgeGeo = new THREE.BoxGeometry(20, 2, Math.hypot(x, z) - 280 - outerRadius);
+            const bridgeMat = new THREE.MeshStandardMaterial({ color: 0xa0522d });
+            const bridge = new THREE.Mesh(bridgeGeo, bridgeMat);
+            bridge.position.set(x / 2, 8.5, z / 2);
+            bridge.rotation.y = -angle;
+            scene.add(bridge);
+        }
+
+        // --- FERROVIA CIRCULAR SUSPENSA E TREM ---
+        const railCurveRadius = circuitRadius;
+        const railSegments = 128;
+        const railTrackGeo = new THREE.TorusGeometry(railCurveRadius, 5, 16, railSegments);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9 });
+        const railway = new THREE.Mesh(railTrackGeo, railMat);
+        railway.rotation.x = Math.PI / 2;
+        railway.position.set(0, 22, 0);
+        scene.add(railway);
+
+        for (let i = 0; i < outerIslandCount; i++) {
+            const angle = (i / outerIslandCount) * Math.PI * 2;
+            const px = Math.cos(angle) * circuitRadius;
+            const pz = Math.sin(angle) * circuitRadius;
+            const pillarGeo = new THREE.CylinderGeometry(4, 4, 20);
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+            pillar.position.set(px, 12, pz);
+            scene.add(pillar);
+        }
+
+        const trainGeo = new THREE.BoxGeometry(50, 16, 22);
+        const trainMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8 });
+        const train = new THREE.Mesh(trainGeo, trainMat);
+        scene.add(train);
+
+        let trainAngle = 0;
+
+        // --- PERSONAGEM 3D ---
+        const playerGroup = new THREE.Group();
+        const bodyGeo = new THREE.BoxGeometry(4, 8, 2.4);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0055ff });
+        const playerBody = new THREE.Mesh(bodyGeo, bodyMat);
+        playerBody.position.y = 4;
+        playerGroup.add(playerBody);
+
+        const headGeo = new THREE.BoxGeometry(2.8, 2.8, 2.8);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
+        const playerHead = new THREE.Mesh(headGeo, headMat);
+        playerHead.position.y = 9;
+        playerGroup.add(playerHead);
+
+        playerGroup.position.set(0, 10, 0);
+        scene.add(playerGroup);
+
+        let joystickMove = { x: 0, y: 0 };
+        const joystickBase = document.getElementById('joystick-base');
+        const joystickStick = document.getElementById('joystick-stick');
+        let touching = false;
+        let centerPos = { x: 0, y: 0 };
+
+        joystickBase.addEventListener('touchstart', (e) => {
+            touching = true;
+            const rect = joystickBase.getBoundingClientRect();
+            centerPos = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!touching) return;
+            const touch = e.touches[0];
+            const dx = touch.clientX - centerPos.x;
+            const dy = touch.clientY - centerPos.y;
+            const dist = Math.min(40, Math.sqrt(dx * dx + dy * dy));
+            const angle = Math.atan2(dy, dx);
+
+            const stickX = Math.cos(angle) * dist;
+            const stickY = Math.sin(angle) * dist;
+            joystickStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+
+            joystickMove.x = stickX / 40;
+            joystickMove.y = stickY / 40;
+        });
+
+        window.addEventListener('touchend', () => {
+            touching = false;
+            joystickMove = { x: 0, y: 0 };
+            joystickStick.style.transform = `translate(0px, 0px)`;
+        });
+
+        function doAction() {
+            inv.wood += 2;
+            inv.stone += 1;
+            inv.coal += Math.random() > 0.5 ? 1 : 0;
+            inv.gold += Math.random() > 0.8 ? 1 : 0;
+            inv.diamond += Math.random() > 0.95 ? 1 : 0;
+            inv.oil += Math.random() > 0.98 ? 1 : 0;
+            updateUI();
+        }
+
+        document.getElementById('action-btn').addEventListener('click', doAction);
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const speed = 70 * delta;
+
+            playerGroup.position.x += joystickMove.x * speed;
+            playerGroup.position.z += joystickMove.y * speed;
+
+            trainAngle += 0.12 * delta;
+            const trainX = Math.cos(trainAngle) * railCurveRadius;
+            const trainZ = Math.sin(trainAngle) * railCurveRadius;
+            train.position.set(trainX, 22, trainZ);
+            train.rotation.y = -trainAngle;
+
+            camera.position.x = playerGroup.position.x;
+            camera.position.y = playerGroup.position.y + 400;
+            camera.position.z = playerGroup.position.z + 500;
+            camera.lookAt(playerGroup.position.x, playerGroup.position.y, playerGroup.position.z);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>
