@@ -54,6 +54,7 @@
 <div id="banner"></div><div id="flashov"></div>
 <div id="boss">👁️ Lord Vilkron · HP 999.999.999<div><i></i></div><small>Invulnerável</small></div>
 <div id="intro"></div>
+<button id="admBtn" style="display:none;position:fixed;top:48px;right:8px;z-index:6;background:rgba(120,30,160,.85);color:#fff;border:1px solid #fff6;border-radius:12px;padding:6px 10px;font-size:13px" onclick="openPanel('adm')">🛠️ Admin</button>
 <div id="fade" style="position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .8s;z-index:15"></div>
 
 <script>/* TEXTURAS EMBUTIDAS (geradas automaticamente - nao editar). Permitem jogar so com o index.html */
@@ -367,7 +368,7 @@ function trainTick(dt) {
     STATION_A.forEach((sa, k) => { const d = wrapA(dir * (sa - mid)); if (d < best) { best = d; bi = k; } });
     let f;
     if (tr.wait > 0) { tr.wait -= dt; tr.ramp = 0; f = 0; if (tr.wait <= 0) tr.stIdx = -1; }
-    else { tr.ramp = Math.min(1, tr.ramp + dt / 2.5); f = Math.max(.2, Math.min(1, best / .03)) * tr.ramp; if (tr.prevD < .02 && best > 1) { tr.wait = 8; tr.stIdx = tr.prevI; } }
+    else { tr.ramp = Math.min(1, tr.ramp + dt / 2.5); f = Math.max(.2, Math.min(1, best / .03)) * tr.ramp; if (bi !== tr.prevI && tr.prevD < .05) { tr.wait = 8; tr.stIdx = tr.prevI; } }
     tr.prevD = best; tr.prevI = bi; tr.a = wrapA(tr.a + dir * 42 * f * dt / R);
     tr.cars.forEach((c, i) => { const a = tr.a - dir * TRAIN_D[i] / R; c.position.set(Math.cos(a) * R, CFG.railY + .8, Math.sin(a) * R); c.rotation.y = -a - dir * Math.PI / 2; });
     tr.puffT -= dt; if (tr.puffT <= 0) { tr.puffT = f > .1 ? .09 : .35; const sp = 42 * f * dir; emitPuff(tr.cars[0], -Math.sin(tr.a) * sp, Math.cos(tr.a) * sp); }
@@ -689,7 +690,7 @@ function ringFx(p, color, from, to, dur, y = .8) {
 }
 function hpUI() { document.getElementById('hp').firstChild.style.width = Math.max(0, hp / HPMAX * 100) + '%'; }
 function hurt(n, msg = '💥 Você morreu!') {
-  if (dead) return; if (inSafe(player.position.x, player.position.z)) return; if (shieldT > 0) n = Math.ceil(n / 2);
+  if (dead || window.GOD) return; if (inSafe(player.position.x, player.position.z)) return; if (shieldT > 0) n = Math.ceil(n / 2);
   n = Math.max(1, Math.ceil(n * VEST[(profile && profile.vest) || 0]));
   hp -= n; dmgText(player.position, '-' + n, '#ff6b5a'); hpUI(); if (hp <= 0) drown(msg);
 }
@@ -985,7 +986,7 @@ const NameService = {
 function saveProfile() { try { localStorage.setItem('vikron_profile', JSON.stringify(profile)); } catch (e) {} }
 let nameSprite;
 function setLabel() {
-  applySkin();
+  applySkin(); document.getElementById('admBtn').style.display = profile && profile.role === 'admin' ? '' : 'none';
   if (nameSprite) player.remove(nameSprite);
   const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
   g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 8, 256, 48); g.fillStyle = '#fff'; g.fillText((profile.clan ? '[' + profile.clan.tag + '] ' : '') + profile.name, 128, 42);
@@ -1008,7 +1009,7 @@ async function startGame() {
   document.getElementById('intro').style.display = 'none';
 }
 let panelKind = '';
-function openPanel(k) { const p = document.getElementById('panel'); if (p.style.display === 'block' && panelKind === k) { p.style.display = 'none'; return; } panelKind = k; p.style.display = 'block'; k === 'craft' ? craftUI() : k === 'ticket' ? ticketUI() : shopUI(); }
+function openPanel(k) { const p = document.getElementById('panel'); if (p.style.display === 'block' && panelKind === k) { p.style.display = 'none'; return; } panelKind = k; p.style.display = 'block'; k === 'craft' ? craftUI() : k === 'ticket' ? ticketUI() : k === 'adm' ? admUI() : shopUI(); }
 function toggleShop() {
   const p = document.getElementById('panel');
   if (p.style.display === 'block' && (panelKind === 'shop' || panelKind === 'ticket')) { p.style.display = 'none'; return; }
@@ -1042,6 +1043,31 @@ function boardTick(dt) {
     boarding = true; const fd = document.getElementById('fade'); fd.style.opacity = 1; flash('🚂 Embarcando...');
     setTimeout(() => { if (!dead) { const d = stationLocal(tk.to, 40, 33); player.position.set(d.x, CFG.top, d.z); camSnap = true; profile.ticket = null; saveProfile(); flash('🚂 Você chegou à Estação ' + (tk.to + 1)); } fd.style.opacity = 0; boarding = false; }, 1000);
   } else { hintT -= dt; if (hintT <= 0) { hintT = 25; flash('🚉 Aguardando o trem...'); } }
+}
+
+// ---- menu de admin (testes) ----
+function nearestStn() { let b = 0, bd = 1e9; STN.forEach((s, i) => { const d = Math.hypot(player.position.x - s.x, player.position.z - s.z); if (d < bd) { bd = d; b = i; } }); return b; }
+function tpTo(x, z) { player.position.set(x, CFG.top, z); camSnap = true; }
+function admUI() {
+  if (!profile || profile.role !== 'admin') { document.getElementById('panel').style.display = 'none'; return; }
+  let h = `<h3>🛠️ Admin · 🪙 ${inv.coins}</h3><small>Ferramentas de teste. ID: ${profile.uid}</small>`;
+  h += `<button onclick="admGive()">💰 +10.000 moedas e +100 de cada recurso</button><button onclick="admTools()">⛏️ Todas as ferramentas em diamante</button><button onclick="admGod()">${window.GOD ? '🛡️ Imortal: LIGADO (tocar desliga)' : '🛡️ Imortal: desligado (tocar liga)'}</button>`;
+  h += `<br><b>🧭 Teleportar</b><button onclick="tpTo(0, 260)">🏰 Castelo</button><button onclick="tpTo(MALL.x, MALL.z + 90)">🏬 Shopping</button>`;
+  h += STN.map((s, i) => { const q = stationLocal(i, 10, 33); return `<button onclick="tpTo(${q.x.toFixed(1)}, ${q.z.toFixed(1)})">🚉 Estação ${i + 1} (fila de embarque)</button>`; }).join('');
+  h += `<br><b>🚂 Trem</b><button onclick="admTrain()">Chamar um trem à estação mais próxima (${nearestStn() + 1})</button>`;
+  h += `<br><b>🎫 Preço dos bilhetes</b><input id="tk0" type="number" value="${TICKET[0]}"><input id="tk1" type="number" value="${TICKET[1]}"><input id="tk2" type="number" value="${TICKET[2]}"><button onclick="setTickets()">Salvar preços</button>`;
+  h += `<br><button onclick="testAwake()">☠️ Despertar Lord Vilkron</button><button onclick="openPanel('adm')">Fechar</button>`;
+  document.getElementById('panel').innerHTML = h;
+}
+function admGive() { inv.coins += 10000; for (const k in inv) if (k !== 'coins') inv[k] += 100; refresh(); saveSoon(); admUI(); flash('💰 Recursos adicionados'); }
+function admTools() { for (const t in TOOLS) tools[t] = 4; setHeld(); refresh(); saveSoon(); admUI(); flash('⛏️ Ferramentas de diamante'); }
+function admGod() { window.GOD = !window.GOD; admUI(); flash(window.GOD ? '🛡️ Imortal ligado' : 'Imortal desligado'); }
+function admTrain() {
+  const i = nearestStn(); let best = null, bd = 9;
+  for (const tr of TRAINS) { const d = wrapA(tr.dir * (STATION_A[i] - tr.a)); if (d < bd) { bd = d; best = tr; } }
+  const tr = best || TRAINS[0], half = TRAIN_D[TRAIN_D.length - 1] / 2 / tr.R;
+  tr.a = wrapA(STATION_A[i] + tr.dir * half); tr.wait = 30; tr.ramp = 0; tr.stIdx = i; tr.prevI = (i + 1) % STATION_A.length; tr.prevD = 9;
+  flash('🚂 Trem parado na estação ' + (i + 1) + ' por 30 s');
 }
 async function setTickets() {
   const v = [0, 1, 2].map(k => parseInt(fv('tk' + k), 10)); if (v.some(x => !(x > 0 && x <= 100000)) || !(v[0] < v[1] && v[1] < v[2])) return flash('Preços: positivos e crescentes (perto < médio < longe)');
