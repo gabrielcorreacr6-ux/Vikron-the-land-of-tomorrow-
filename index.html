@@ -1357,6 +1357,7 @@ const WEAPONS = {
 };
 function setHeld() {
   armR.hand.clear(); armL.hand.clear(); heldOrb = null; uiEq();
+  return; // mãos livres: nenhum objeto na mão do personagem
   if (!equipped) return;
   const w = WEAPONS[equipped], g = buildHeld(equipped, TCOL[tools[equipped] - 1]); g.rotation.x = w.ir;
   (w.hand === 'L' ? armL : armR).hand.add(g);
