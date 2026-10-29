@@ -46,7 +46,7 @@
 <div id="msg"></div>
 <div id="joy"><div id="knob"></div></div>
 <div id="act">COLETAR<br>/ CAVAR</div>
-<div id="bar"><button onclick="togglePanel()">🔨 Criar</button><button id="modeBtn" onclick="cycleMode()"></button><button id="blkBtn" onclick="cycleBlk()"></button><button id="eqBtn" onclick="cycleEquip()"></button><button onclick="toggleShop()">🏪 Loja</button></div>
+<div id="bar"><button onclick="togglePanel()">🔨 Criar</button><button id="modeBtn" onclick="cycleMode()"></button><button id="blkBtn" onclick="cycleBlk()"></button><button id="eqBtn" onclick="cycleEquip()"></button><button id="shopBtn" style="display:none" onclick="toggleShop()">🏪 Loja</button></div>
 <div id="panel"></div>
 <div id="air"><i></i></div>
 <div id="hp"><i></i></div>
@@ -278,7 +278,7 @@ function nearStall() { const px = player.position.x, pz = player.position.z; let
 let curStall = null, wasSafe = false, lastNear = null;
 function mallTick() {
   const sf = inSafe(player.position.x, player.position.z);
-  if (sf !== wasSafe) { wasSafe = sf; flash(sf ? '🕊️ Zona segura: Shopping Vikron' : 'Você saiu da zona segura'); }
+  if (sf !== wasSafe) { wasSafe = sf; document.getElementById('shopBtn').style.display = sf ? '' : 'none'; flash(sf ? '🕊️ Zona segura: Shopping Vikron' : 'Você saiu da zona segura'); }
   const ns = nearStall(); if (ns !== lastNear) { lastNear = ns; if (ns) flash(ns.e + ' ' + ns.n + ': toque em 🏪 Loja'); }
 }
 
@@ -302,19 +302,56 @@ for (let i = 0; i < 360; i++) {
   const p = new T.Mesh(new T.CylinderGeometry(1.4, 1.9, CFG.railY, 8), L(0x9a9a9a));
   p.position.set(Math.cos(a) * CFG.ringR, CFG.railY / 2 - 1.5, Math.sin(a) * CFG.ringR); scene.add(p);
 }
-const train = [];
-for (let i = 0; i < 5; i++) {
-  const car = new T.Group();
-  if (i === 0) {
-    const bo = new T.Mesh(new T.CylinderGeometry(3, 3, 12, 12), L(0x222222)); bo.rotation.z = Math.PI / 2; bo.position.y = 5;
-    const ch = new T.Mesh(new T.CylinderGeometry(1, 1.4, 4, 8), L(0x111111)); ch.position.set(4, 9, 0);
-    const cab = new T.Mesh(new T.BoxGeometry(5, 7, 6), L(0xb3392e)); cab.position.set(-6, 5.5, 0);
-    car.add(bo, ch, cab);
-  } else {
-    const b = new T.Mesh(new T.BoxGeometry(13, 6, 6), L([0xe0a030, 0x2f8f6a, 0xc4452d, 0x3a64b5][i - 1])); b.position.y = 5;
-    const rf = new T.Mesh(new T.BoxGeometry(13.5, 1, 6.5), woodM); rf.position.y = 8.3; car.add(b, rf);
+const TAU = Math.PI * 2, wrapA = x => ((x % TAU) + TAU) % TAU;
+const wheelG = new T.CylinderGeometry(1.6, 1.6, .8, 12).rotateX(Math.PI / 2), wheelM = L(0x1a1a1a), hubM = L(0xb3392e);
+function addWheels(g, xs, y, z, r) { for (const x of xs) for (const sg of [-1, 1]) { const w = new T.Mesh(wheelG, wheelM); w.position.set(x, y, sg * z); w.scale.set(r, r, 1); const h = new T.Mesh(new T.CylinderGeometry(.5, .5, .9, 8).rotateX(Math.PI / 2), hubM); h.position.copy(w.position); g.add(w, h); } }
+function mkLoco() {
+  const g = new T.Group(), blk = L(0x1c1c1f), red = L(0xb3392e), gold = L(0xc9a227);
+  const m = (geo, mat, x, y, z) => { const o = new T.Mesh(geo, mat); o.position.set(x, y, z); g.add(o); return o; };
+  m(new T.CylinderGeometry(3, 3, 14, 14).rotateZ(Math.PI / 2), blk, 2, 5.4, 0);
+  m(new T.CylinderGeometry(3.15, 3.15, .7, 14).rotateZ(Math.PI / 2), gold, 9.2, 5.4, 0);
+  m(new T.CylinderGeometry(1.2, .85, 3.2, 10), blk, 7, 9.4, 0); m(new T.CylinderGeometry(1.8, 1.2, .8, 10), gold, 7, 11.2, 0);
+  m(new T.SphereGeometry(1.3, 10, 8), gold, 1.5, 8.3, 0); m(new T.CylinderGeometry(.5, .5, 2, 8), gold, -1.5, 8.6, 0);
+  m(new T.BoxGeometry(6, 8, 7), red, -7, 5.8, 0); m(new T.BoxGeometry(7.6, .9, 8.4), L(0x2a2a2a), -7, 10.2, 0);
+  for (const sg of [-1, 1]) m(new T.BoxGeometry(2.4, 2.4, .3), L(0x9fd3ff), -7, 6.8, sg * 3.55);
+  m(new T.ConeGeometry(3.2, 4.5, 4).rotateZ(-Math.PI / 2), L(0x555a60), 12.4, 1.8, 0);
+  m(new T.SphereGeometry(.7, 8, 6), new T.MeshBasicMaterial({ color: 0xfff2a0 }), 9.8, 6.2, 0);
+  m(new T.BoxGeometry(24, .8, 5), blk, 0, 1.3, 0);
+  addWheels(g, [-6, -1, 4, 8], 1.8, 3, 1.15); return g;
+}
+function mkTender() {
+  const g = new T.Group(); const bd = new T.Mesh(new T.BoxGeometry(11, 4.5, 6), L(0x1c1c1f)); bd.position.y = 4; const coal = new T.Mesh(new T.BoxGeometry(9, 1.6, 4.6), L(0x0a0a0a)); coal.position.y = 6.9;
+  g.add(bd, coal); addWheels(g, [-3, 3], 1.4, 3, .9); return g;
+}
+function mkWagon(i) {
+  const g = new T.Group(); const b = new T.Mesh(new T.BoxGeometry(13, 6, 6.4), L([0xe0a030, 0x2f8f6a, 0xc4452d, 0x3a64b5][i % 4])); b.position.y = 4.6;
+  const rf = new T.Mesh(new T.BoxGeometry(13.6, 1, 7), woodM); rf.position.y = 8.1; g.add(b, rf);
+  for (let k = -1; k <= 1; k++) for (const sg of [-1, 1]) { const w = new T.Mesh(new T.BoxGeometry(1.8, 2, .2), L(0xcfe8ff)); w.position.set(k * 4, 5.4, sg * 3.25); g.add(w); }
+  addWheels(g, [-4, 4], 1.4, 3.2, .9); return g;
+}
+const TRAINS = [], TRAIN_D = [0, 21], STATION_A = [];
+for (let i = 2; i < 9; i++) TRAIN_D.push(21 + (i - 1) * 16);
+for (let i = 1; i <= CFG.n; i++) STATION_A.push(wrapA(isl[i].a));
+for (let k = 0; k < 3; k++) {
+  const cars = []; for (let i = 0; i < TRAIN_D.length; i++) { const c = i === 0 ? mkLoco() : i === 1 ? mkTender() : mkWagon(i); scene.add(c); cars.push(c); }
+  TRAINS.push({ cars, a: wrapA(k * TAU / 3 + 0.4), wait: 0, ramp: 1, prevD: 9, puffT: 0 });
+}
+const puffTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(240,240,240,.95)'); gr.addColorStop(1, 'rgba(240,240,240,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new T.CanvasTexture(c); })();
+const puffs = [], PUFF_LIFE = 3.4; let puffI = 0;
+for (let i = 0; i < 160; i++) { const sp = new T.Sprite(new T.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false })); sp.visible = false; scene.add(sp); puffs.push({ sp, life: 99, vx: 0, vz: 0 }); }
+const _pv = new T.Vector3();
+function emitPuff(loco, vx, vz) { const p = puffs[puffI++ % puffs.length]; _pv.set(7, 11.8, 0); loco.updateMatrixWorld(); loco.localToWorld(_pv); p.sp.position.copy(_pv); p.life = 0; p.vx = vx * .35 + (Math.random() - .5) * 2; p.vz = vz * .35 + (Math.random() - .5) * 2 + 1.5; p.sp.visible = true; }
+function trainTick(dt) {
+  for (const tr of TRAINS) {
+    const mid = tr.a - (TRAIN_D[TRAIN_D.length - 1] / 2) / CFG.ringR; let best = 9; for (const sa of STATION_A) { const d = wrapA(sa - mid); if (d < best) best = d; }
+    let f;
+    if (tr.wait > 0) { tr.wait -= dt; tr.ramp = 0; f = 0; }
+    else { tr.ramp = Math.min(1, tr.ramp + dt / 2.5); f = Math.max(.2, Math.min(1, best / .03)) * tr.ramp; if (tr.prevD < .02 && best > 1) tr.wait = 6; }
+    tr.prevD = best; tr.a = wrapA(tr.a + .012 * f * dt);
+    tr.cars.forEach((c, i) => { const a = tr.a - TRAIN_D[i] / CFG.ringR; c.position.set(Math.cos(a) * CFG.ringR, CFG.railY + .8, Math.sin(a) * CFG.ringR); c.rotation.y = -a - Math.PI / 2; });
+    tr.puffT -= dt; if (tr.puffT <= 0) { tr.puffT = f > .1 ? .09 : .35; const sp = .012 * CFG.ringR * f; emitPuff(tr.cars[0], -Math.sin(tr.a) * sp, Math.cos(tr.a) * sp); }
   }
-  scene.add(car); train.push(car);
+  for (const p of puffs) { if (!p.sp.visible) continue; p.life += dt; if (p.life > PUFF_LIFE) { p.sp.visible = false; continue; } const k = p.life / PUFF_LIFE; p.sp.position.x += p.vx * dt; p.sp.position.z += p.vz * dt; p.sp.position.y += (7 - 4 * k) * dt; p.sp.scale.setScalar(4 + k * 14); p.sp.material.opacity = .75 * (1 - k); }
 }
 
 // ================= TERMINAIS (sólidos e indestrutíveis) =================
@@ -322,6 +359,10 @@ for (let i = 1; i <= CFG.n; i++) {
   const sI = isl[i], th = -sI.a - Math.PI / 2, g = new T.Group();
   const add = (w, h, d, c, y) => { const o = new T.Mesh(new T.BoxGeometry(w, h, d), c.isMaterial ? c : L(c)); o.position.y = y; g.add(o); };
   add(90, 1.2, 40, stoneM, 0.6); add(60, 14, 22, houseM, 7); add(66, 2, 28, roofRed, 15); add(62, 4, 22.4, 0x2a3a4a, 9);
+  add(96, 1, 16, stoneM, 16.5); add(100, 1.8, 22, roofRed, 32.2); add(96, .8, .8, 0x2a3a4a, 25); 
+  for (let px = -42; px <= 42; px += 12) for (const sz of [-8.5, 8.5]) { const pl = new T.Mesh(new T.BoxGeometry(1.6, 15, 1.6), stoneM); pl.position.set(px, 24, sz); g.add(pl); }
+  for (const sz of [-8.5, 8.5]) { const rl = new T.Mesh(new T.BoxGeometry(96, 1.2, .6), L(0x6b4a2a)); rl.position.set(0, 19.5, sz); g.add(rl); }
+  const sgn = textSprite('🚂 ESTAÇÃO ' + i, 512, 96, 34); sgn.position.set(0, 38, 0); g.add(sgn);
   g.position.set(sI.x, CFG.top, sI.z); g.rotation.y = th; scene.add(g);
   addBox(sI.x, sI.z, 30, 11, th);
   for (let k = nodes.length - 1; k >= 0; k--) { const q = nodes[k].mesh.position; if (Math.hypot(q.x - sI.x, q.z - sI.z) < 60) { scene.remove(nodes[k].mesh); if (nodes[k].extra) scene.remove(nodes[k].extra); nodes.splice(k, 1); } }
@@ -1223,12 +1264,7 @@ function loop() {
     splash.scale.addScalar(dt * 30); splash.material.opacity = Math.max(0, 0.8 - deadT * 0.35);
     if (deadT > 2.6) respawn();
   }
-  trainT += dt * 0.012;
-  train.forEach((car, i) => {
-    const a = trainT - i * 0.0045;
-    car.position.set(Math.cos(a) * CFG.ringR, CFG.railY + 0.8, Math.sin(a) * CFG.ringR);
-    car.rotation.y = -a - Math.PI / 2;
-  });
+  trainTick(dt);
   ships.forEach((s, i) => {
     s.a += s.sp * dt;
     s.g.position.set(Math.cos(s.a) * s.r, 0.5 + Math.sin(t * 2 + i) * 0.5, Math.sin(s.a) * s.r);
