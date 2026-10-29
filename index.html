@@ -37,10 +37,11 @@
 </style>
 </head>
 <body>
+<div id="dark" style="position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s"></div>
 <div id="hud">
   <div class="it">🪵 <b id="i_wood">0</b></div><div class="it">🪨 <b id="i_stone">0</b></div>
   <div class="it">⚫ <b id="i_coal">0</b></div><div class="it">🥇 <b id="i_gold">0</b></div>
-  <div class="it">💎 <b id="i_diamond">0</b></div><div class="it">🛢️ <b id="i_oil">0</b></div>
+  <div class="it">💎 <b id="i_diamond">0</b></div><div class="it">🛢️ <b id="i_oil">0</b></div><div class="it">🔦 <b id="i_torch">0</b></div>
 </div>
 <div id="clan">⚔️ Clã: Sem clã · Status: Explorando</div>
 <div id="msg"></div>
@@ -423,12 +424,35 @@ for (let i = 0; i < 30; i++) {
 
 // ================= JOGADOR =================
 const player = new T.Group();
-const pB = new T.Mesh(new T.BoxGeometry(2.4, 3.2, 1.4), L(0x2d6cdf)); pB.position.y = 3.2;
-const pH = new T.Mesh(new T.BoxGeometry(1.8, 1.8, 1.8), L(0xf1c27d)); pH.position.y = 5.7;
-const pL = new T.Mesh(new T.BoxGeometry(2.2, 1.6, 1.2), L(0x24408a)); pL.position.y = 1;
-function mkArm(x) { const a = new T.Group(); a.position.set(x, 4.6, 0); const m = new T.Mesh(new T.BoxGeometry(0.9, 2.6, 0.9), L(0x2d6cdf)); m.position.y = -1.3; a.hand = new T.Group(); a.hand.position.y = -2.7; a.add(m, a.hand); player.add(a); return a; }
-const armR = mkArm(1.7), armL = mkArm(-1.7);
-player.add(pB, pH, pL); player.position.set(0, CFG.top, 260); scene.add(player);
+const SKIN = { skin: '#f1c27d', hair: '#4a2f1b', pants: '#2b3a67', boot: '#3b2a1c', belt: '#5a3a1c' };
+const SHIRT = { guerreiro: '#b03a3a', arqueiro: '#3f8f4a', mago: '#6a4ab0', sacerdote: '#e8e4d8', artesao: '#c9822f' };
+function pxTex(fn) { const c = document.createElement('canvas'); c.width = c.height = 16; const g = c.getContext('2d'); fn(g, (col, x, y, w = 1, h = 1) => { g.fillStyle = col; g.fillRect(x, y, w, h); }); const t = new T.CanvasTexture(c); t.magFilter = t.minFilter = T.NearestFilter; return t; }
+const lam = t => new T.MeshLambertMaterial({ map: t });
+function headMats() {
+  const S = SKIN.skin, H = SKIN.hair;
+  const face = pxTex((g, p) => { p(S, 0, 0, 16, 16); p(H, 0, 0, 16, 4); p(H, 0, 4, 2, 4); p(H, 14, 4, 2, 4); p('#fff', 3, 8, 3, 2); p('#fff', 10, 8, 3, 2); p('#2b4a9a', 4, 8, 2, 2); p('#2b4a9a', 11, 8, 2, 2); p('#3a2614', 3, 7, 4, 1); p('#3a2614', 9, 7, 4, 1); p('#d9a066', 7, 10, 2, 2); p('#b0524a', 6, 13, 4, 1); });
+  const sideR = pxTex((g, p) => { p(S, 0, 0, 16, 16); p(H, 0, 0, 16, 5); p(H, 8, 5, 8, 7); p('#d9a066', 2, 9, 1, 2); });
+  const sideL = pxTex((g, p) => { p(S, 0, 0, 16, 16); p(H, 0, 0, 16, 5); p(H, 0, 5, 8, 7); p('#d9a066', 13, 9, 1, 2); });
+  const back = pxTex((g, p) => { p(H, 0, 0, 16, 16); p(S, 0, 13, 16, 3); });
+  const top = pxTex((g, p) => { p(H, 0, 0, 16, 16); p('#5a3a22', 7, 2, 2, 12); }), bot = pxTex((g, p) => { p(S, 0, 0, 16, 16); });
+  return [lam(sideR), lam(sideL), lam(top), lam(bot), lam(face), lam(back)];
+}
+function torsoMats(col) {
+  const base = (g, p) => { p(col, 0, 0, 16, 16); p(SKIN.belt, 0, 13, 16, 2); p('#d4af37', 7, 13, 2, 2); };
+  const front = pxTex((g, p) => { base(g, p); p(SKIN.skin, 6, 0, 4, 2); p(SKIN.skin, 7, 2, 2, 1); p('rgba(255,255,255,.28)', 5, 5, 6, 4); p('rgba(0,0,0,.18)', 7, 3, 2, 9); });
+  const side = pxTex(base), back = pxTex((g, p) => { base(g, p); p('rgba(0,0,0,.15)', 3, 3, 10, 8); });
+  const top = pxTex((g, p) => p(col, 0, 0, 16, 16)), bot = pxTex((g, p) => p(SKIN.pants, 0, 0, 16, 16));
+  return [lam(side), lam(side), lam(top), lam(bot), lam(front), lam(back)];
+}
+const armMat = col => lam(pxTex((g, p) => { p(col, 0, 0, 16, 11); p('rgba(0,0,0,.15)', 0, 10, 16, 1); p(SKIN.skin, 0, 11, 16, 5); }));
+const legMat = lam(pxTex((g, p) => { p(SKIN.pants, 0, 0, 16, 16); p('rgba(0,0,0,.18)', 7, 0, 2, 12); p(SKIN.boot, 0, 12, 16, 4); p('rgba(255,255,255,.12)', 0, 12, 16, 1); }));
+const pB = new T.Mesh(new T.BoxGeometry(2.4, 3.2, 1.4), torsoMats(SHIRT.guerreiro)); pB.position.y = 3.2;
+const pH = new T.Mesh(new T.BoxGeometry(1.8, 1.8, 1.8), headMats()); pH.position.y = 5.7;
+function mkLeg(x) { const g = new T.Group(); g.position.set(x, 1.7, 0); const m = new T.Mesh(new T.BoxGeometry(1.1, 1.7, 1.1), legMat); m.position.y = -.85; g.add(m); player.add(g); return g; }
+function mkArm(x) { const a = new T.Group(); a.position.set(x, 4.6, 0); const m = new T.Mesh(new T.BoxGeometry(0.9, 2.6, 0.9), armMat(SHIRT.guerreiro)); m.position.y = -1.3; a.mesh = m; a.hand = new T.Group(); a.hand.position.y = -2.7; a.add(m, a.hand); player.add(a); return a; }
+const armR = mkArm(1.7), armL = mkArm(-1.7), legR = mkLeg(.6), legL = mkLeg(-.6);
+function applySkin() { const c = SHIRT[profile && profile.cls] || SHIRT.guerreiro; pB.material = torsoMats(c); armR.mesh.material = armMat(c); armL.mesh.material = armMat(c); }
+player.add(pB, pH); player.position.set(0, CFG.top, 260); scene.add(player);
 
 function walkable(x, z) { // 3 grama/ponte · 1.2 areia · 1.05 buraco · 0.4 raso · 0 águas fundas
   let g = 0;
@@ -471,8 +495,8 @@ const CLS = {
   sacerdote: { n: 'Sacerdote', e: '📖', aff: ['book'], d: 'Suporte do grupo: cura e proteção. Afinidade com livros.' },
   artesao: { n: 'Artesão', e: '⛏️', aff: ['pickaxe', 'hoe'], d: 'Mestre da mineração e do cultivo. Afinidade com picaretas e enxadas.' }
 };
-const ITEMS = { coins: 'Moedas', wood: 'Madeira', stone: 'Pedra', sand: 'Areia', coal: 'Carvão', iron: 'Ferro', copper: 'Cobre', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo', drum: 'Tambor', dirt: 'Terra', wheat: 'Trigo' };
-const ICON = { coins: '🪙', wood: '🪵', stone: '🪨', sand: '🏖️', coal: '⚫', iron: '⛓️', copper: '🟠', gold: '🥇', diamond: '💎', oil: '🛢️', drum: '🪣', dirt: '🟫', wheat: '🌾' };
+const ITEMS = { coins: 'Moedas', wood: 'Madeira', stone: 'Pedra', sand: 'Areia', coal: 'Carvão', iron: 'Ferro', copper: 'Cobre', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo', drum: 'Tambor', torch: 'Tocha', dirt: 'Terra', wheat: 'Trigo' };
+const ICON = { coins: '🪙', wood: '🪵', stone: '🪨', sand: '🏖️', coal: '⚫', iron: '⛓️', copper: '🟠', gold: '🥇', diamond: '💎', oil: '🛢️', drum: '🪣', torch: '🔦', dirt: '🟫', wheat: '🌾' };
 const inv = {}; for (const k in ITEMS) inv[k] = 0;
 document.getElementById('hud').innerHTML = Object.keys(ITEMS).map(k => `<div class="it">${ICON[k]} <b id="i_${k}">0</b></div>`).join('');
 // ferramentas: tier 0 = nenhuma; 1 madeira, 2 ferro, 3 ouro, 4 diamante
@@ -495,6 +519,7 @@ function craftUI() {
     const c = TIERS[i][1], ok = Object.keys(c).every(k => inv[k] >= c[k]);
     h += `<button ${ok ? '' : 'disabled'} onclick="craft('${t}')">${TOOLS[t][1]} ${TOOLS[t][0]} de ${TIERS[i][0]}<small>${Object.keys(c).map(k => c[k] + ' ' + ITEMS[k]).join(' + ')}</small></button>`;
   }
+  h += `<button ${inv.wood >= 1 && inv.coal >= 1 ? '' : 'disabled'} onclick="craftTorch()">🔦 Tochas (x2)<small>1 Madeira + 1 Carvão · ilumina o subsolo (cada uma dura 90 s)</small></button>`;
   document.getElementById('panel').innerHTML = h + '<button onclick="togglePanel()">Fechar</button>';
 }
 function craft(t) {
@@ -549,24 +574,42 @@ function onBridge(x, z, m = 3) { for (let i = 1; i <= CFG.n; i++) { const a = is
 const protectedAt = (x, z, r = 2.5) => hitStatic(x, z, r) || onBridge(x, z) || inSafe(x, z);
 let rebuildT;
 function rebuildSoon() { clearTimeout(rebuildT); rebuildT = setTimeout(() => { for (const s of dirtyIsl) { s.grass.geometry.dispose(); s.grass.geometry = slabGeo(s, 0, 8, s.hl); } dirtyIsl.clear(); }, 60); }
-function addHole(ix, iz) {
+const FLOORS = [3, 1.06, -1.4, -3.8], pitGeo = new T.BoxGeometry(3.84, 1, 3.84), pitMat = new T.MeshLambertMaterial({ color: 0x6b4a2a, side: T.BackSide });
+const holeDepthAt = (x, z) => { const h = holes.get(cellKey(x, z)); return h ? h.d : 0; };
+function setHoleDepth(h, d) { h.d = d; h.m.position.y = FLOORS[d]; h.p.scale.y = 3 - FLOORS[d]; h.p.position.y = (3 + FLOORS[d]) / 2; }
+function addHole(ix, iz, d = 1) {
   const key = ix + ',' + iz; if (holes.has(key)) return false; const s = islandForCell(ix, iz); if (!s) return false;
   const m = new T.Mesh(holeGeo, holeMat); m.position.set(ix * G, 1.06, iz * G); scene.add(m);
-  holes.set(key, { s, m }); s.hl.push([ix, iz]); dirtyIsl.add(s); rebuildSoon(); return true;
+  const pt = new T.Mesh(pitGeo, pitMat); pt.position.x = ix * G; pt.position.z = iz * G; scene.add(pt);
+  const h = { s, m, p: pt, d: 1, ix, iz }; holes.set(key, h); setHoleDepth(h, d); s.hl.push([ix, iz]); dirtyIsl.add(s); rebuildSoon(); return true;
 }
 function fillHole(ix, iz) {
   const key = ix + ',' + iz, h = holes.get(key); if (!h) return false;
-  scene.remove(h.m); holes.delete(key); const k = h.s.hl.findIndex(c => c[0] === ix && c[1] === iz); if (k >= 0) h.s.hl.splice(k, 1); dirtyIsl.add(h.s); rebuildSoon(); return true;
+  if (h.d > 1) { setHoleDepth(h, h.d - 1); return true; }
+  scene.remove(h.m); scene.remove(h.p); holes.delete(key); const k = h.s.hl.findIndex(c => c[0] === ix && c[1] === iz); if (k >= 0) h.s.hl.splice(k, 1); dirtyIsl.add(h.s); rebuildSoon(); return true;
+}
+function digLoot(d) {
+  const tier = tools.pickaxe, r = Math.random, o = {}, add = (k, n) => { o[k] = (o[k] || 0) + n; }, note = [];
+  if (d === 1) { add('dirt', 2 + (tier >> 1)); if (r() < .4) add('stone', 1); if (r() < .15) add('coal', 1); }
+  else if (d === 2) { add('dirt', 1); add('stone', 1 + (r() < .5 ? 1 : 0)); if (r() < .45) add('coal', 1); if (r() < .35) add('iron', 1); if (r() < .3) add('copper', 1); if (tier >= 2 && r() < .08) add('gold', 1); }
+  else { add('stone', 1); if (r() < .3) add('iron', 1); if (tier >= 2 && r() < .3) add('gold', 1); if (tier >= 3 && r() < .14) add('diamond', 1); if (r() < .25) { if (inv.drum > 0) { inv.drum--; add('oil', 1); } else note.push('🛢️ petróleo! falta um Tambor'); } }
+  const txt = []; for (const k in o) { inv[k] += o[k]; txt.push('+' + o[k] + ' ' + ITEMS[k]); }
+  refresh(); flash(txt.concat(note).join(' · ')); saveSoon();
 }
 function dig() {
-  const t = target(), ix = t.ix, iz = t.iz, x = ix * G, z = iz * G, key = ix + ',' + iz;
+  const t = target(), ix = t.ix, iz = t.iz, x = ix * G, z = iz * G, key = ix + ',' + iz, h = holes.get(key);
   if (!tools.pickaxe) return flash('Precisa de uma picareta (🔨 Criar)');
-  if (holes.has(key)) return flash('Já está cavado aqui');
+  if (h) {
+    if (h.d >= 3) return flash('Fundo máximo: camada 3');
+    if (h.d >= 2 && tools.pickaxe < 2) return flash('Para a camada 3 precisa de picareta de ferro');
+    return swing('pickaxe', () => { if (holes.get(key) !== h || h.d >= 3) return; setHoleDepth(h, h.d + 1); burst({ x, y: FLOORS[h.d], z }, 0x6b4a2a, 10, 12); digLoot(h.d); }, { x, z });
+  }
   if (blocks.has(ck(ix, 0, iz))) return flash('Demola a construção primeiro');
   if (protectedAt(x, z)) return flash('Construção original: não pode ser danificada');
   if (!islandForCell(ix, iz)) return flash('Só dá para cavar na grama');
   for (const n of nodes) if (Math.hypot(n.mesh.position.x - x, n.mesh.position.z - z) < 5) return flash('Tem algo no caminho');
-  swing('pickaxe', () => { if (!addHole(ix, iz)) return; burst({ x, y: CFG.top, z }, 0x6b4a2a, 8, 12); give('dirt', 2 + Math.floor(tools.pickaxe / 2)); }, { x, z });
+  const nd = holeDepthAt(player.position.x, player.position.z) || 1;
+  swing('pickaxe', () => { if (!addHole(ix, iz, nd)) return; burst({ x, y: FLOORS[nd], z }, 0x6b4a2a, 8, 12); digLoot(nd); }, { x, z });
 }
 
 let mode = 0, blk = 'wood';
@@ -588,7 +631,7 @@ function updateGhost() {
   const t = target(), iy = mode === 2 ? t.iy - 1 : mode === 3 ? 0 : t.iy;
   if (iy < 0) { ghost.visible = false; return; }
   ghost.position.set(t.ix * G, base(t.ix, t.iz) + iy * G + G / 2, t.iz * G);
-  ghost.material.color.set(mode === 2 ? 0xff9933 : mode === 3 ? (!protectedAt(t.ix * G, t.iz * G) && islandForCell(t.ix, t.iz) && !holes.has(t.ix + ',' + t.iz) ? 0xc08040 : 0xff4444) : (walkable(t.ix * G, t.iz * G) >= 1 && t.iy < 6 && !protectedAt(t.ix * G, t.iz * G) ? 0x66ff66 : 0xff4444));
+  ghost.material.color.set(mode === 2 ? 0xff9933 : mode === 3 ? (!protectedAt(t.ix * G, t.iz * G) && islandForCell(t.ix, t.iz) && (!holes.has(t.ix + ',' + t.iz) || holes.get(t.ix + ',' + t.iz).d < 3) ? 0xc08040 : 0xff4444) : (walkable(t.ix * G, t.iz * G) >= 1 && t.iy < 6 && !protectedAt(t.ix * G, t.iz * G) ? 0x66ff66 : 0xff4444));
 }
 function place() {
   const t = target(), gy = walkable(t.ix * G, t.iz * G);
@@ -796,9 +839,9 @@ actB.addEventListener('pointerdown', e => { e.preventDefault(); holding = true; 
 // ---- salvar (navegador) ----
 let saveT;
 function saveSoon() { clearTimeout(saveT); saveT = setTimeout(save, 800); }
-function save() { if (window.__resetting) return; try { localStorage.setItem('vikron_save', JSON.stringify({ inv, tools, blocks: [...blocks.values()].map(b => [b.ix, b.iy, b.iz, b.type, b.owner, b.age]), holes: [...holes.keys()], at: Date.now() })); cloudSaveSoon(); } catch (e) {} }
+function save() { if (window.__resetting) return; try { localStorage.setItem('vikron_save', JSON.stringify({ inv, tools, blocks: [...blocks.values()].map(b => [b.ix, b.iy, b.iz, b.type, b.owner, b.age]), holes: [...holes].map(([k, h]) => k + ':' + h.d), at: Date.now() })); cloudSaveSoon(); } catch (e) {} }
 function load() {
-  try { const d = JSON.parse(localStorage.getItem('vikron_save') || 'null'); if (!d) return; Object.assign(inv, d.inv); Object.assign(tools, d.tools); d.blocks.forEach(b => addBlock(b[0], b[1], b[2], b[3], b[4], b[5])); (d.holes || []).forEach(k => { const a = k.split(','); addHole(+a[0], +a[1]); }); } catch (e) {}
+  try { const d = JSON.parse(localStorage.getItem('vikron_save') || 'null'); if (!d) return; Object.assign(inv, d.inv); Object.assign(tools, d.tools); d.blocks.forEach(b => addBlock(b[0], b[1], b[2], b[3], b[4], b[5])); (d.holes || []).forEach(k => { const [c, dp] = String(k).split(':'), a = c.split(','); addHole(+a[0], +a[1], +dp || 1); }); } catch (e) {}
 }
 load(); refresh(); ui();
 // ---- nascimento: casa (cama) ou lugar aleatório ----
@@ -862,10 +905,21 @@ function equip(t) { equipped = t && tools[t] ? t : null; setHeld(); }
 function cycleEquip() { const l = [null, ...Object.keys(TOOLS).filter(t => tools[t])]; equipped = l[(l.indexOf(equipped) + 1) % l.length]; setHeld(); }
 function uiEq() { ui(); const b = document.getElementById('eqBtn'); if (b) b.textContent = '✋ ' + (equipped ? TOOLS[equipped][0] : 'Mãos'); }
 function startSwing() { const w = equipped && WEAPONS[equipped]; swingDur = w ? w.dur : .3; swingT = swingDur; }
+let torchT = 0, darkKey = '';
+function darkTick(dt, d) {
+  const el = document.getElementById('dark'), torch = inv.torch > 0;
+  if (d >= 2 && torch) { torchT += dt; if (torchT > 90) { torchT = 0; inv.torch--; refresh(); flash(inv.torch ? '🔦 Uma tocha apagou' : '🔦 Sem tochas! Escuridão total'); } }
+  const key = d >= 2 ? d + (torch ? 'T' : 'N') : '0'; if (key === darkKey) return; darkKey = key;
+  if (key === '0') { el.style.opacity = 0; return; }
+  const r = d === 2 ? (torch ? 34 : 16) : (torch ? 26 : 9), a = d === 2 ? .88 : .95;
+  el.style.background = `radial-gradient(circle at 50% 55%, rgba(0,0,0,0) ${r}%, rgba(0,0,0,${a}) ${r + 26}%)`; el.style.opacity = 1;
+}
+function craftTorch() { if (inv.wood < 1 || inv.coal < 1) return flash('Precisa de 1 Madeira e 1 Carvão'); inv.wood--; inv.coal--; inv.torch += 2; refresh(); saveSoon(); craftUI(); flash('+2 Tochas'); }
 function animatePlayer(dt, t, mv) {
   armR.rotation.set(0, 0, 0); armL.rotation.set(0, 0, 0);
   const sw = mv ? Math.sin(t * 9) * 0.6 : 0; armR.rotation.x = sw; armL.rotation.x = -sw;
-  pB.position.y = 3.2 + (mv ? Math.abs(Math.sin(t * 9)) * 0.15 : 0);
+  const bob = mv ? Math.abs(Math.sin(t * 9)) * 0.15 : Math.sin(t * 2) * 0.03;
+  pB.position.y = 3.2 + bob; pH.position.y = 5.7 + bob; const lg = swingT > 0 ? 0 : sw * 1.15; legR.rotation.x = -lg; legL.rotation.x = lg;
   let k = -1; if (swingT > 0) { swingT -= dt; k = Math.max(0, 1 - swingT / swingDur); }
   const w = equipped && WEAPONS[equipped];
   if (pending && k >= pendHit) { const f = pending; pending = null; f(); }
@@ -931,6 +985,7 @@ const NameService = {
 function saveProfile() { try { localStorage.setItem('vikron_profile', JSON.stringify(profile)); } catch (e) {} }
 let nameSprite;
 function setLabel() {
+  applySkin();
   if (nameSprite) player.remove(nameSprite);
   const c = document.createElement('canvas'); c.width = 256; c.height = 64; const g = c.getContext('2d');
   g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 8, 256, 48); g.fillStyle = '#fff'; g.fillText((profile.clan ? '[' + profile.clan.tag + '] ' : '') + profile.name, 128, 42);
@@ -1144,7 +1199,7 @@ function makeClan() {
 }
 function leaveClan() { const c = clans(); delete c[profile.clan.tag]; try { localStorage.setItem('vikron_clans', JSON.stringify(c)); } catch (e) {} profile.clan = null; saveProfile(); setLabel(); shopUI(); }
 function sell(k) { inv.coins += inv[k] * PRICE[k]; inv[k] = 0; refresh(); saveSoon(); shopUI(); }
-function buyClass(k) { if (inv.coins < COST_CLASS) return flash('Moedas insuficientes'); inv.coins -= COST_CLASS; profile.cls = k; if (Net.on && Net.reg) Net.rpc('set_class', { p_cls: k }).catch(() => {}); saveProfile(); refresh(); saveSoon(); shopUI(); flash('Nova classe: ' + CLS[k].n); }
+function buyClass(k) { if (inv.coins < COST_CLASS) return flash('Moedas insuficientes'); inv.coins -= COST_CLASS; profile.cls = k; applySkin(); if (Net.on && Net.reg) Net.rpc('set_class', { p_cls: k }).catch(() => {}); saveProfile(); refresh(); saveSoon(); shopUI(); flash('Nova classe: ' + CLS[k].n); }
 async function rename() {
   const n = document.getElementById('nn').value.trim();
   if (!NameService.valid(n)) return flash('Nome inválido (3-16 letras, números ou _)');
@@ -1328,7 +1383,7 @@ function loop() {
   if (!dead) {
     const gy = walkable(player.position.x, player.position.z);
     if (gy === 0) { air -= dt; if (air <= 0) drown(); } else air = Math.min(AIR_MAX, air + dt * 4);
-    player.position.y += ((gy || -1.6) - player.position.y) * Math.min(1, dt * 10);
+    const hd = holeDepthAt(player.position.x, player.position.z); player.position.y += ((hd ? FLOORS[hd] : (gy || -1.6)) - player.position.y) * Math.min(1, dt * 10); darkTick(dt, hd);
     const ab = document.getElementById('air'); ab.style.display = air < AIR_MAX ? 'block' : 'none'; ab.firstChild.style.width = (air / AIR_MAX * 100) + '%';
   } else {
     deadT += dt; player.position.y -= dt * 4; player.rotation.y += dt * 3;
