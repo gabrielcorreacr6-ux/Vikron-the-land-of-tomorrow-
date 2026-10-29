@@ -429,8 +429,8 @@ function togglePanel() { openPanel('craft'); }
 
 // ---- blocos / bases ----
 const G = 4, FARM_T = 30, ME = 'eu';
-const BC = { wood: 0x9a6a35, stone: 0x8d8f94, sand: 0xe3cf8f, farm: 0x5a3b1c, dirt: 0x6b4a2a }, BHP = { wood: 3, stone: 6, sand: 2, farm: 1, dirt: 2 };
-const BLK = ['wood', 'stone', 'sand', 'farm', 'dirt'], BLKN = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', farm: 'Plantação', dirt: 'Terra (aterrar)' };
+const BC = { wood: 0x9a6a35, stone: 0x8d8f94, sand: 0xe3cf8f, farm: 0x5a3b1c, dirt: 0x6b4a2a, bed: 0xb03a3a }, BHP = { wood: 3, stone: 6, sand: 2, farm: 1, dirt: 2, bed: 3 };
+const BLK = ['wood', 'stone', 'sand', 'farm', 'dirt', 'bed'], BLKN = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', farm: 'Plantação', dirt: 'Terra (aterrar)', bed: 'Cama (define sua casa)' };
 const bgeo = new T.BoxGeometry(G, G, G), fgeo = new T.BoxGeometry(G, 0.6, G), bmat = {};
 for (const k in BC) bmat[k] = L(BC[k]);
 bmat.wood = woodB; bmat.stone = stoneB;
@@ -444,18 +444,20 @@ function blockMat(type, owner) {
   const sk = profile && profile.skin; if (owner !== ME || !sk || sk === 'padrao' || !SKINS[sk] || !['wood', 'stone', 'sand'].includes(type)) return bmat[type];
   const k = sk + type; if (!skinCache[k]) { skinCache[k] = bmat[type].clone(); skinCache[k].color.set(SKINS[sk].c); } return skinCache[k];
 }
+const bedgeo = new T.BoxGeometry(G, G / 2, G);
 function addBlock(ix, iy, iz, type, owner, age = 0) {
   let m;
   if (type === 'farm') {
     m = new T.Group(); const so = new T.Mesh(fgeo, bmat.farm); so.position.y = 0.3;
     m.crop = new T.Mesh(new T.BoxGeometry(3, 3, 3), L(0x5fbf3a)); m.add(so, m.crop); m.position.set(ix * G, base(ix, iz), iz * G);
+  } else if (type === 'bed') { m = new T.Mesh(bedgeo, bmat.bed); m.position.set(ix * G, base(ix, iz) + iy * G + G / 4, iz * G);
   } else { m = new T.Mesh(bgeo, blockMat(type, owner)); m.position.set(ix * G, base(ix, iz) + iy * G + G / 2, iz * G); }
   scene.add(m);
   const b = { ix, iy, iz, type, owner, hp: BHP[type], mesh: m, age }; blocks.set(ck(ix, iy, iz), b);
   if (type === 'farm') cropVis(b);
   return b;
 }
-function solidAt(x, z) { const ix = Math.round(x / G), iz = Math.round(z / G); for (let y = 0; y < 2; y++) { const b = blocks.get(ck(ix, y, iz)); if (b && b.type !== 'farm') return true; } return false; }
+function solidAt(x, z) { const ix = Math.round(x / G), iz = Math.round(z / G); for (let y = 0; y < 2; y++) { const b = blocks.get(ck(ix, y, iz)); if (b && b.type !== 'farm' && b.type !== 'bed') return true; } return false; }
 setInterval(() => { for (const b of blocks.values()) if (b.type === 'farm' && b.age < FARM_T) { b.age++; cropVis(b); } }, 1000);
 
 // ---- terreno cavável ----
@@ -521,6 +523,11 @@ function place() {
   if (t.iy > 5) return flash('Altura máxima');
   if (protectedAt(t.ix * G, t.iz * G)) return flash('Área protegida: construção original');
   if (t.iy < 2 && Math.hypot(t.ix * G - player.position.x, t.iz * G - player.position.z) < 3) return flash('Você está no caminho');
+  if (blk === 'bed') {
+    if (t.iy > 0) return flash('A cama só vai no chão'); if (inv.wood < 6) return flash('Precisa de 6 Madeira');
+    const ob = homeBed(); if (ob) { scene.remove(ob.mesh); blocks.delete(ck(ob.ix, ob.iy, ob.iz)); }
+    inv.wood -= 6; addBlock(t.ix, t.iy, t.iz, 'bed', ME); refresh(); saveSoon(); return flash('🛏️ Casa definida: você renasce aqui');
+  }
   if (blk === 'farm') {
     if (!tools.hoe) return flash('Precisa de uma enxada (🔨 Criar)');
     if (t.iy > 0 || gy < 3) return flash('Plantio só no chão de grama');
@@ -711,11 +718,28 @@ actB.addEventListener('pointerdown', e => { e.preventDefault(); holding = true; 
 // ---- salvar (navegador) ----
 let saveT;
 function saveSoon() { clearTimeout(saveT); saveT = setTimeout(save, 800); }
-function save() { if (window.__resetting) return; try { localStorage.setItem('vikron_save', JSON.stringify({ inv, tools, blocks: [...blocks.values()].map(b => [b.ix, b.iy, b.iz, b.type, b.owner, b.age]), holes: [...holes.keys()] })); } catch (e) {} }
+function save() { if (window.__resetting) return; try { localStorage.setItem('vikron_save', JSON.stringify({ inv, tools, blocks: [...blocks.values()].map(b => [b.ix, b.iy, b.iz, b.type, b.owner, b.age]), holes: [...holes.keys()], at: Date.now() })); cloudSaveSoon(); } catch (e) {} }
 function load() {
   try { const d = JSON.parse(localStorage.getItem('vikron_save') || 'null'); if (!d) return; Object.assign(inv, d.inv); Object.assign(tools, d.tools); d.blocks.forEach(b => addBlock(b[0], b[1], b[2], b[3], b[4], b[5])); (d.holes || []).forEach(k => { const a = k.split(','); addHole(+a[0], +a[1]); }); } catch (e) {}
 }
 load(); refresh(); ui();
+// ---- nascimento: casa (cama) ou lugar aleatório ----
+function homeBed() { for (const b of blocks.values()) if (b.type === 'bed' && b.owner === ME) return b; return null; }
+function randomSpawn() {
+  for (let i = 0; i < 80; i++) {
+    const is = isl[Math.floor(Math.random() * isl.length)], cx = is.x, cz = is.z, r = is.r * .75;
+    const a2 = Math.random() * 2 * Math.PI, d = Math.sqrt(Math.random()) * r, x = cx + Math.cos(a2) * d, z = cz + Math.sin(a2) * d;
+    if (walkable(x, z) >= 3 && !protectedAt(x, z, 8) && !solidAt(x, z) && Math.hypot(x, z) > 190) return { x, z };
+  }
+  return { x: 0, z: 260 };
+}
+function spawnPlayer() {
+  const b = homeBed(); let q = null, home = false;
+  if (b) for (const o of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, -1]]) { const x = b.ix * G + o[0] * G * 1.5, z = b.iz * G + o[1] * G * 1.5; if (!hitStatic(x, z, 2) && !solidAt(x, z) && walkable(x, z) >= 1.2) { q = { x, z }; home = true; break; } }
+  if (!q) q = randomSpawn();
+  player.position.set(q.x, CFG.top, q.z); return home;
+}
+spawnPlayer();
 
 // ================= CÂMERA GIRATÓRIA =================
 let camYaw = 0, camPitch = 0.7, camDist = 170, camId = null, lx = 0, ly = 0;
@@ -780,26 +804,20 @@ const COST_CLASS = 500, COST_NAME = 300, RESERVED = ['admin', 'vikron', 'moderad
 // ---- servidor (Supabase) · deixe vazio para jogar offline ----
 const SUPA_URL = 'https://fxhmgmdlbvecmfmocjba.supabase.co', SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4aG1nbWRsYnZlY21mbW9jamJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNDc3NDMsImV4cCI6MjEwODgyMzc0M30.p4BxSSqtFoRPro_pG2EErd9zh0kgah_cdTwiewK4bms';
 const Net = {
-  sb: null, on: false, reg: false,
+  sb: null, on: false, reg: false, user: null, recovery: false,
   async init() {
     if (!SUPA_URL || !SUPA_KEY || !window.supabase) return false;
     try {
       this.sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+      this.sb.auth.onAuthStateChange((ev, sess) => { if (ev === 'PASSWORD_RECOVERY') this.recovery = true; this.user = sess ? sess.user : null; });
       const { data } = await this.sb.auth.getSession();
-      if (!data.session) { const r = await this.sb.auth.signInAnonymously(); if (r.error) throw r.error; }
+      if (data.session && data.session.user.is_anonymous) { await this.sb.auth.signOut(); this.user = null; } else this.user = data.session ? data.session.user : null;
       this.on = true;
     } catch (e) { this.on = false; console.warn('Servidor indisponível', e); }
     return this.on;
   },
   async rpc(fn, args) { const { data, error } = await this.sb.rpc(fn, args || {}); if (error) throw new Error(error.message); return data; }
 };
-async function syncNet() {
-  if (!Net.on) return;
-  try {
-    if (profile && !Net.reg) { const uid = await Net.rpc('register_player', { p_name: profile.name, p_cls: profile.cls }); Net.reg = true; if (uid !== profile.uid) { profile.uid = uid; saveProfile(); } }
-    await pullNet();
-  } catch (e) { if (/name_taken/.test(e.message)) flash('Seu nome já existe no servidor: troque no Balcão'); }
-}
 async function pullNet() {
   if (!Net.on || !Net.reg || !profile) return;
   try {
@@ -812,8 +830,15 @@ async function pullNet() {
     try { localStorage.setItem('vikron_lastweek', String(o.week)); } catch (e) {}
   } catch (e) { console.warn('sync', e); }
 }
-const netReady = Net.init().then(syncNet);
+const netReady = Net.init();
 setInterval(pullNet, 60000);
+let cloudT = 0;
+function cloudSaveSoon() { if (!Net.on || !Net.reg) return; clearTimeout(cloudT); cloudT = setTimeout(() => cloudSaveNow(), 15000); }
+async function cloudSaveNow(wipe) {
+  if (!Net.on || !Net.reg) return;
+  try { let d = null; if (!wipe) d = JSON.parse(localStorage.getItem('vikron_save') || 'null'); await Net.rpc('cloud_save', { p_data: d }); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) cloudSaveNow(); });
 const NameService = {
   reg() { try { return JSON.parse(localStorage.getItem('vikron_names') || '{}'); } catch (e) { return {}; } },
   valid(n) { return /^[A-Za-z0-9_]{3,16}$/.test(n); },
@@ -844,11 +869,7 @@ async function startGame() {
   const n = document.getElementById('nm').value.trim(), err = document.getElementById('ierr');
   if (!NameService.valid(n)) { err.textContent = 'Nome inválido: use 3 a 16 letras, números ou _'; return; }
   let uid = 'VK-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-  await netReady;
-  if (Net.on) {
-    try { uid = await Net.rpc('register_player', { p_name: n, p_cls: chosen }); Net.reg = true; }
-    catch (e) { err.textContent = /name_taken/.test(e.message) ? 'Esse nome já está em uso. Escolha outro.' : /banned/.test(e.message) ? 'Conta banida.' : 'Servidor indisponível. Tente de novo.'; return; }
-  } else if (!(await NameService.claim(n, uid))) { err.textContent = 'Esse nome já está em uso. Escolha outro.'; return; }
+  if (!(await NameService.claim(n, uid))) { err.textContent = 'Esse nome já está em uso. Escolha outro.'; return; }
   profile = { uid, name: n, cls: chosen }; offer = { start: Date.now(), week: 0, paid: 0, pending: false }; saveOffer(); inv.coins += 20; saveProfile(); save(); setLabel(); refresh();
   document.getElementById('intro').style.display = 'none';
 }
@@ -882,19 +903,114 @@ function shopUI() {
   } else if (st.id === 'feira') {
     h += `<br><b>Feira dos Jogadores</b><small>Aqui jogadores vão anunciar picaretas, machados e enxadas feitos por eles, além de barris cheios ou vazios. Preços definidos pelo vendedor.<br>⏳ Precisa do servidor online (Firebase). Ainda não está ativo.</small>`;
   } else {
+    if (profile.role === 'admin') h += `<br><b>🔎 Consultar jogador (admin)</b><input id="aid" placeholder="ID do jogador (VK-...)"><button onclick="adminInfo()">Ver nome e idade</button><small id="ainfo"></small>`;
     h += `<br><b>🎁 Doar por ID</b><small>${Net.on && Net.reg ? 'Limite de 800 🪙 por dia' : 'Precisa do servidor online'}</small><input id="did" placeholder="ID do jogador (VK-...)"><input id="dqt" type="number" min="1" placeholder="Valor"><button onclick="donateTo()">Doar</button>`;
     h += `<br><b>👁️ Oferenda a Lord Vilkron</b><small>${offer.paid}/${OFFER_GOAL} 🪙 · ${offerLeft()}<br>Os Agentes do Caos vigiam as doações. Se a meta falhar, ele desperta.</small><button onclick="donate(100)">Ofertar 100 🪙</button><button onclick="donate(500)">Ofertar 500 🪙</button><button onclick="donate('all')">Ofertar tudo</button><button onclick="testAwake()">☠️ Despertar Lord Vilkron (teste)</button>`;
     h += `<br><b>Trocar de classe</b> (${COST_CLASS} 🪙)`;
     for (const k in CLS) if (k !== profile.cls) h += `<button onclick="buyClass('${k}')">${CLS[k].e} ${CLS[k].n}<small>${CLS[k].d}</small></button>`;
     h += `<br><b>Trocar de nome</b> (${COST_NAME} 🪙)<input id="nn" maxlength="16" placeholder="Novo nome"><button onclick="rename()">Comprar novo nome</button>`;
+    if (Net.on && Net.reg) h += `<br><button onclick="logout()">🚪 Sair da conta</button>`;
   }
   h += `<button onclick="openPanel('shop')">Fechar</button>`;
   document.getElementById('panel').innerHTML = h;
+}
+// ---- conta (e-mail e senha) ----
+const fv = id => ((document.getElementById(id) || {}).value || '');
+const authErr = t => { const e = document.getElementById('ierr'); if (e) e.textContent = t; };
+const okEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const okAge = a => Number.isInteger(a) && a >= 5 && a <= 120;
+const errAuth = e => { const m = (e && e.message) || ''; return /Invalid login/i.test(m) ? 'E-mail ou senha incorretos' : /not confirmed/i.test(m) ? 'Confirme seu e-mail primeiro (veja a caixa de entrada e o spam)' : /already registered|already been registered/i.test(m) ? 'Esse e-mail já tem conta' : /Password should|at least/i.test(m) ? 'Senha: mínimo 6 caracteres' : /rate limit|too many|seconds/i.test(m) ? 'Muitas tentativas. Espere alguns minutos.' : 'Não foi possível. Tente de novo.'; };
+function authUI(mode, msg) {
+  const el = document.getElementById('intro'); el.style.display = 'flex';
+  const I = (id, ph, type, extra) => `<input id="${id}" type="${type || 'text'}" placeholder="${ph}" ${extra || ''}>`;
+  const cl = () => Object.keys(CLS).map(k => `<div class="cls ${k === chosen ? 'sel' : ''}" data-k="${k}" onclick="pick('${k}')"><b>${CLS[k].e} ${CLS[k].n}</b><small>${CLS[k].d}</small></div>`).join('');
+  const lnk = (t, m) => `<button style="background:none;color:#9ab" onclick="authUI('${m}')">${t}</button>`;
+  let h = '<div class="card"><h2>Vikron: The Land of Tomorrow</h2>';
+  if (mode === 'signup') h += '<p>Crie sua conta.</p>' + I('em', 'E-mail', 'email', 'autocomplete="email"') + I('pw', 'Senha (mínimo 6)', 'password', 'autocomplete="new-password"') + I('nm', 'Nome no jogo (3-16: letras, números, _)', 'text', 'maxlength="16"') + I('ag', 'Sua idade', 'number', 'inputmode="numeric" min="5" max="120"') + '<p>Classe inicial:</p>' + cl() + '<p id="ierr"></p><button onclick="doSignup()">Criar conta</button>' + lnk('Já tenho conta', 'login');
+  else if (mode === 'forgot') h += '<p>Informe seu e-mail para receber o link de nova senha.</p>' + I('em', 'E-mail', 'email') + '<p id="ierr"></p><button onclick="doForgot()">Enviar link</button>' + lnk('Voltar', 'login');
+  else if (mode === 'newpass') h += '<p>Escolha a nova senha.</p>' + I('pw', 'Nova senha (mínimo 6)', 'password', 'autocomplete="new-password"') + '<p id="ierr"></p><button onclick="doNewPass()">Salvar senha</button>';
+  else if (mode === 'perfil') h += '<p>Falta criar seu personagem.</p>' + I('nm', 'Nome no jogo (3-16: letras, números, _)', 'text', 'maxlength="16"') + I('ag', 'Sua idade', 'number', 'inputmode="numeric" min="5" max="120"') + '<p>Classe inicial:</p>' + cl() + '<p id="ierr"></p><button onclick="doPerfil()">Começar aventura</button>';
+  else h += '<p>Entre na sua conta.</p>' + I('em', 'E-mail', 'email', 'autocomplete="email"') + I('pw', 'Senha', 'password', 'autocomplete="current-password"') + '<p id="ierr"></p><button onclick="doLogin()">Entrar</button><button style="background:#3a4a66;color:#fff" onclick="authUI(\'signup\')">Criar conta</button>' + lnk('Esqueci a senha', 'forgot');
+  el.innerHTML = h + '</div>'; if (msg) authErr(msg);
+}
+async function doLogin() {
+  const em = fv('em').trim(), pw = fv('pw'); if (!okEmail(em) || !pw) return authErr('Informe e-mail e senha');
+  authErr('Entrando...');
+  const { data, error } = await Net.sb.auth.signInWithPassword({ email: em, password: pw });
+  if (error) return authErr(errAuth(error));
+  Net.user = data.user; await enterWithAccount();
+}
+async function doSignup() {
+  const em = fv('em').trim(), pw = fv('pw'), n = fv('nm').trim(), a = parseInt(fv('ag'), 10);
+  if (!okEmail(em)) return authErr('E-mail inválido'); if (pw.length < 6) return authErr('Senha: mínimo 6 caracteres');
+  if (!NameService.valid(n)) return authErr('Nome inválido: 3 a 16 letras, números ou _'); if (!okAge(a)) return authErr('Informe sua idade (5 a 120)');
+  authErr('Criando conta...');
+  try { if (!(await Net.rpc('name_free', { p_name: n }))) return authErr('Esse nome já está em uso'); } catch (e) { return authErr('Servidor indisponível. Tente de novo.'); }
+  const { data, error } = await Net.sb.auth.signUp({ email: em, password: pw, options: { data: { name: n, cls: chosen, age: a }, emailRedirectTo: location.origin + location.pathname } });
+  if (error) return authErr(errAuth(error));
+  if (data.session) { Net.user = data.user; return enterWithAccount(); }
+  authUI('login', '✅ Conta criada! Enviamos um e-mail de confirmação. Confirme e depois entre.');
+}
+async function doForgot() {
+  const em = fv('em').trim(); if (!okEmail(em)) return authErr('E-mail inválido');
+  authErr('Enviando...');
+  const { error } = await Net.sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+  if (error) return authErr(errAuth(error));
+  authUI('login', '✅ Se esse e-mail tiver conta, o link chegou (veja o spam).');
+}
+async function doNewPass() {
+  const pw = fv('pw'); if (pw.length < 6) return authErr('Senha: mínimo 6 caracteres');
+  const { error } = await Net.sb.auth.updateUser({ password: pw }); if (error) return authErr(errAuth(error));
+  Net.recovery = false; try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  await enterWithAccount();
+}
+async function doPerfil() {
+  const n = fv('nm').trim(), a = parseInt(fv('ag'), 10);
+  if (!NameService.valid(n)) return authErr('Nome inválido: 3 a 16 letras, números ou _'); if (!okAge(a)) return authErr('Informe sua idade (5 a 120)');
+  try { await Net.rpc('register_player', { p_name: n, p_cls: chosen, p_age: a }); } catch (e) { return authErr(/name_taken/.test(e.message) ? 'Esse nome já está em uso' : 'Não foi possível criar o personagem'); }
+  await enterWithAccount();
+}
+async function enterWithAccount() {
+  try {
+    let p = await Net.rpc('my_player');
+    if (!p) {
+      const m = (Net.user && Net.user.user_metadata) || {};
+      if (!m.name || !m.age) return authUI('perfil');
+      try { await Net.rpc('register_player', { p_name: m.name, p_cls: m.cls || 'guerreiro', p_age: +m.age }); }
+      catch (e) { return authUI('perfil', /name_taken/.test(e.message) ? 'Esse nome já está em uso. Escolha outro.' : 'Não foi possível criar o personagem.'); }
+      p = await Net.rpc('my_player');
+    }
+    if (p.banned) { await Net.sb.auth.signOut(); Net.user = null; return authUI('login', 'Conta banida.'); }
+    const old = profile, foreign = !old || old.uid !== p.uid;
+    profile = Object.assign(foreign ? {} : old, { uid: p.uid, name: p.name, cls: p.cls, role: p.role });
+    saveProfile(); Net.reg = true;
+    let loc = null; try { loc = JSON.parse(localStorage.getItem('vikron_save') || 'null'); } catch (e) {}
+    const cs = await Net.rpc('cloud_load'); let reload = false;
+    if (cs && (foreign || !loc || (cs.at || 0) > (loc.at || 0))) { localStorage.setItem('vikron_save', JSON.stringify(cs)); reload = true; }
+    else if (!cs && foreign) { localStorage.setItem('vikron_save', JSON.stringify({ inv: { coins: 20 }, tools: {}, blocks: [], holes: [], at: Date.now() })); reload = true; }
+    if (reload) { window.__resetting = true; location.reload(); return; }
+    document.getElementById('intro').style.display = 'none'; setLabel(); refresh(); setHeld(); pullNet(); cloudSaveSoon();
+  } catch (e) { console.warn(e); authUI('login', 'Servidor indisponível. Tente de novo.'); }
+}
+async function boot() {
+  const el = document.getElementById('intro'); el.style.display = 'flex'; el.innerHTML = '<div class="card"><h2>Carregando...</h2></div>';
+  await netReady;
+  if (!Net.on) { el.style.display = 'none'; if (profile) setLabel(); else introUI(); return; }
+  if (Net.recovery) return authUI('newpass');
+  if (!Net.user) return authUI('login');
+  await enterWithAccount();
+}
+async function logout() { await cloudSaveNow(); try { await Net.sb.auth.signOut(); } catch (e) {} window.__resetting = true; try { localStorage.removeItem('vikron_save'); localStorage.removeItem('vikron_profile'); } catch (e) {} location.reload(); }
+async function adminInfo() {
+  const id = fv('aid').trim().toUpperCase(), o = document.getElementById('ainfo'); if (!id) return;
+  try { const i = await Net.rpc('admin_player_info', { p_uid: id }); o.textContent = i.name + ' · ' + i.age + ' anos · ' + i.role + (i.banned ? ' · BANIDO' : ''); }
+  catch (e) { o.textContent = /no_target/.test(e.message) ? 'ID não encontrado' : 'Sem permissão'; }
 }
 async function donateTo() {
   const id = document.getElementById('did').value.trim().toUpperCase(), a = parseInt(document.getElementById('dqt').value, 10);
   if (!Net.on || !Net.reg) return flash('Doação por ID precisa do servidor online');
   if (!id || !(a > 0)) return flash('Informe o ID e o valor'); if (inv.coins < a) return flash('Moedas insuficientes');
+  if (profile.role === 'admin') { try { const i = await Net.rpc('admin_player_info', { p_uid: id }); if (!confirm('Doar ' + a + ' moedas para ' + i.name + ' (' + i.age + ' anos)?')) return; } catch (e) { return flash('ID não encontrado'); } }
   try { const left = await Net.rpc('donate_to', { p_uid: id, p_amount: a }); inv.coins -= a; refresh(); saveSoon(); shopUI(); flash('🎁 Enviado! Restam ' + (left < 0 ? 'ilimitado' : left + ' 🪙') + ' hoje'); }
   catch (e) { const m = e.message; flash(/no_target/.test(m) ? 'ID não encontrado' : /self/.test(m) ? 'Não dá para doar a si mesmo' : /limit/.test(m) ? 'Limite diário: restam ' + ((m.split('limit:')[1] || '0').trim()) + ' 🪙' : /banned/.test(m) ? 'Conta banida' : 'Erro ao doar'); }
 }
@@ -921,12 +1037,12 @@ async function rename() {
   const n = document.getElementById('nn').value.trim();
   if (!NameService.valid(n)) return flash('Nome inválido (3-16 letras, números ou _)');
   if (inv.coins < COST_NAME) return flash('Moedas insuficientes');
-  if (Net.on) { try { const u = await Net.rpc('register_player', { p_name: n, p_cls: profile.cls }); Net.reg = true; profile.uid = u; } catch (e) { return flash(/name_taken/.test(e.message) ? 'Esse nome já está em uso' : 'Servidor indisponível'); } }
+  if (Net.on && Net.reg) { try { await Net.rpc('rename_player', { p_name: n }); } catch (e) { return flash(/name_taken/.test(e.message) ? 'Esse nome já está em uso' : 'Servidor indisponível'); } }
   else if (!(await NameService.claim(n, profile.uid, profile.name))) return flash('Esse nome já está em uso');
   inv.coins -= COST_NAME; profile.name = n; saveProfile(); setLabel(); refresh(); saveSoon(); shopUI(); flash('Nome alterado!');
 }
 try { profile = JSON.parse(localStorage.getItem('vikron_profile') || 'null'); } catch (e) {}
-if (profile) setLabel(); else introUI();
+if (SUPA_URL && SUPA_KEY) boot(); else if (profile) setLabel(); else introUI();
 refresh(); setHeld();
 
 // ================= LORD VILKRON =================
@@ -997,7 +1113,7 @@ function stomp(sg) {
   const fx_ = vRoot.position.x + sg * 1.7 * VS, fz_ = vRoot.position.z; ringFx({ x: fx_, z: fz_ }, 0xcfa070, 5, 60, .5, .6); burst({ x: fx_, y: CFG.top, z: fz_ }, 0x8a7a66, 12, 24); camShake = Math.max(camShake, .6);
   if (Math.hypot(player.position.x - fx_, player.position.z - fz_) < 70) hurt(25, '👣 Pisoteado por Lord Vilkron');
 }
-function resetAll() { window.__resetting = true; try { localStorage.removeItem('vikron_save'); localStorage.setItem('vikron_offer', JSON.stringify({ start: Date.now(), week: 0, paid: 0, pending: false })); } catch (e) {} location.reload(); }
+async function resetAll() { window.__resetting = true; try { localStorage.removeItem('vikron_save'); localStorage.setItem('vikron_offer', JSON.stringify({ start: Date.now(), week: 0, paid: 0, pending: false })); } catch (e) {} await cloudSaveNow(true); location.reload(); }
 function blast() {
   V.state = 'blast'; V.t = 0; V.alive = false; window.__resetting = true; gid('boss').style.display = 'none';
   const w = new T.Vector3(); vTip.getWorldPosition(w); const pt = { x: w.x, y: CFG.top, z: w.z };
@@ -1075,8 +1191,8 @@ function drown(msg = '💀 Você se afogou!') {
   clearTimeout(flashT); document.getElementById('msg').textContent = msg;
 }
 function respawn() {
-  dead = false; air = AIR_MAX; hp = HPMAX; shieldT = 0; hpUI(); splash.material.opacity = 0; player.position.set(0, CFG.top, 260); player.rotation.set(0, 0, 0);
-  flash('Você renasceu no castelo');
+  dead = false; air = AIR_MAX; hp = HPMAX; shieldT = 0; hpUI(); splash.material.opacity = 0; const atHome = spawnPlayer(); player.rotation.set(0, 0, 0);
+  flash(atHome ? '🛏️ Você renasceu em casa' : 'Você renasceu em um lugar aleatório');
 }
 
 // ================= LOOP =================
