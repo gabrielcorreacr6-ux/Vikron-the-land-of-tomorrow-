@@ -15,7 +15,12 @@
   #knob{position:absolute;left:35px;top:35px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.6)}
   #act{position:fixed;right:24px;bottom:40px;width:104px;height:104px;border-radius:50%;border:3px solid #fff8;background:#f6c40f;color:#222;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;text-align:center}
   #act:active{background:#ffe066}
-  #msg{position:fixed;bottom:170px;left:0;right:0;text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;pointer-events:none}
+  #msg{position:fixed;bottom:220px;left:0;right:0;text-align:center;color:#fff;font-size:14px;text-shadow:0 1px 3px #000;pointer-events:none}
+  #bar{position:fixed;bottom:172px;left:0;right:0;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+  #bar button,#panel button{background:rgba(0,0,0,.65);color:#fff;border:1px solid #fff5;border-radius:12px;padding:8px 12px;font-size:13px}
+  #panel{position:fixed;inset:56px 14px 215px;display:none;background:rgba(15,25,40,.95);color:#fff;border-radius:14px;padding:12px;overflow:auto;touch-action:pan-y}
+  #panel h3{margin:0 0 8px}#panel button{display:block;width:100%;margin:6px 0;text-align:left}#panel button:disabled{opacity:.4}
+  #panel small{display:block;color:#ffd34d;margin-top:2px}
 </style>
 </head>
 <body>
@@ -28,6 +33,8 @@
 <div id="msg"></div>
 <div id="joy"><div id="knob"></div></div>
 <div id="act">COLETAR<br>/ CAVAR</div>
+<div id="bar"><button onclick="togglePanel()">🔨 Criar</button><button id="modeBtn" onclick="cycleMode()"></button><button id="blkBtn" onclick="cycleBlk()"></button></div>
+<div id="panel"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -35,6 +42,8 @@
 const CFG = { centerR: 1500, outerR: 875, ringR: 3500, n: 7, top: 3, railY: 20, bridgeW: 30, speed: 120, sand: 40 };
 let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const T = THREE;
+const ORE_C = { stone: 0x7d7f86, coal: 0x2b2b2b, copper: 0xc8753a, iron: 0xa8806a, gold: 0xe6c14a, diamond: 0x7fe3f0 };
+function pickOre() { const r = rnd(); return r < .5 ? 'stone' : r < .68 ? 'coal' : r < .8 ? 'copper' : r < .9 ? 'iron' : r < .96 ? 'gold' : 'diamond'; }
 
 // ================= CENA =================
 const scene = new T.Scene();
@@ -106,9 +115,9 @@ function addTree(x, z) {
 }
 function addMountain(x, z, big) {
   const h = (big ? 110 : 14) + rnd() * 20, w = (big ? 70 : 8) + rnd() * 8;
-  const m = new T.Mesh(new T.ConeGeometry(w, h, 6), L(0x7d7f86)); m.position.set(x, CFG.top + h / 2, z); scene.add(m);
-  const sn = new T.Mesh(new T.ConeGeometry(w * 0.3, h * 0.25, 6), L(0xf2f2f2)); sn.position.set(x, CFG.top + h * 0.9, z); scene.add(sn);
-  nodes.push({ mesh: m, extra: sn, type: 'rock' });
+  const ore = pickOre(), m = new T.Mesh(new T.ConeGeometry(w, h, 6), L(ORE_C[ore])); m.position.set(x, CFG.top + h / 2, z); scene.add(m);
+  const sn = new T.Mesh(new T.ConeGeometry(w * 0.3, h * 0.25, 6), L(ore === 'stone' ? 0xf2f2f2 : ORE_C[ore])); sn.position.set(x, CFG.top + h * 0.9, z); scene.add(sn);
+  nodes.push({ mesh: m, extra: sn, type: 'rock', ore });
 }
 function addOil(x, z) {
   const o = new T.Mesh(new T.CylinderGeometry(3.5, 3.5, 0.3, 16), L(0x111111)); o.position.set(x, CFG.top + 0.2, z); scene.add(o);
@@ -264,25 +273,134 @@ joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel',
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space' || e.code === 'KeyE') collect(); });
 addEventListener('keyup', e => keys[e.code] = false);
 
-// ================= INVENTÁRIO / COLETA =================
-const inv = { wood: 0, stone: 0, coal: 0, gold: 0, diamond: 0, oil: 0 };
-const names = { wood: 'Madeira', stone: 'Pedra', coal: 'Carvão', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo' };
+// ================= INVENTÁRIO / COLETA / CRIAÇÃO / CONSTRUÇÃO =================
+const ITEMS = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', coal: 'Carvão', iron: 'Ferro', copper: 'Cobre', gold: 'Ouro', diamond: 'Diamante', oil: 'Petróleo', wheat: 'Trigo' };
+const ICON = { wood: '🪵', stone: '🪨', sand: '🏖️', coal: '⚫', iron: '⛓️', copper: '🟠', gold: '🥇', diamond: '💎', oil: '🛢️', wheat: '🌾' };
+const inv = {}; for (const k in ITEMS) inv[k] = 0;
+document.getElementById('hud').innerHTML = Object.keys(ITEMS).map(k => `<div class="it">${ICON[k]} <b id="i_${k}">0</b></div>`).join('');
+// ferramentas: tier 0 = nenhuma; 1 madeira, 2 ferro, 3 ouro, 4 diamante
+const TIERS = [['Madeira', { wood: 5 }], ['Ferro', { iron: 3, wood: 2 }], ['Ouro', { gold: 3, wood: 2 }], ['Diamante', { diamond: 3, wood: 2 }]];
+const TOOLS = { pickaxe: ['Picareta', '⛏️'], axe: ['Machado', '🪓'], sword: ['Espada', '⚔️'], hoe: ['Enxada', '🌱'] };
+const tools = { pickaxe: 0, axe: 0, sword: 0, hoe: 0 };
+const NEED = { stone: 1, coal: 1, copper: 1, iron: 1, gold: 2, oil: 2, diamond: 3 }; // tier mínimo da picareta
 let flashT;
-function flash(t) { const m = document.getElementById('msg'); m.textContent = t; clearTimeout(flashT); flashT = setTimeout(() => m.textContent = '', 1200); }
-function give(k, n = 1) { inv[k] += n; document.getElementById('i_' + k).textContent = inv[k]; flash('+' + n + ' ' + names[k]); }
-function collect() {
-  if (dead) return;
+function flash(t) { const m = document.getElementById('msg'); m.textContent = t; clearTimeout(flashT); flashT = setTimeout(() => m.textContent = '', 1400); }
+function showTools() { document.getElementById('clan').textContent = '⚔️ Clã: Sem clã · ' + Object.keys(TOOLS).map(t => TOOLS[t][1] + (tools[t] ? TIERS[tools[t] - 1][0] : '—')).join(' '); }
+function refresh() { for (const k in inv) document.getElementById('i_' + k).textContent = inv[k]; showTools(); }
+function give(k, n = 1) { inv[k] += n; refresh(); flash('+' + n + ' ' + ITEMS[k]); saveSoon(); }
+
+// ---- criação ----
+function craftUI() {
+  let h = '<h3>🔨 Criar ferramentas</h3>';
+  for (const t in TOOLS) {
+    const i = tools[t];
+    if (i >= 4) { h += `<button disabled>${TOOLS[t][1]} ${TOOLS[t][0]} de Diamante (máximo)</button>`; continue; }
+    const c = TIERS[i][1], ok = Object.keys(c).every(k => inv[k] >= c[k]);
+    h += `<button ${ok ? '' : 'disabled'} onclick="craft('${t}')">${TOOLS[t][1]} ${TOOLS[t][0]} de ${TIERS[i][0]}<small>${Object.keys(c).map(k => c[k] + ' ' + ITEMS[k]).join(' + ')}</small></button>`;
+  }
+  document.getElementById('panel').innerHTML = h + '<button onclick="togglePanel()">Fechar</button>';
+}
+function craft(t) {
+  const i = tools[t], c = TIERS[i][1];
+  if (!Object.keys(c).every(k => inv[k] >= c[k])) return;
+  for (const k in c) inv[k] -= c[k];
+  tools[t]++; refresh(); craftUI(); flash(TOOLS[t][0] + ' de ' + TIERS[i][0] + ' criada!'); saveSoon();
+}
+function togglePanel() { const p = document.getElementById('panel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; if (p.style.display === 'block') craftUI(); }
+
+// ---- blocos / bases ----
+const G = 4, FARM_T = 30, ME = 'eu';
+const BC = { wood: 0x9a6a35, stone: 0x8d8f94, sand: 0xe3cf8f, farm: 0x5a3b1c }, BHP = { wood: 3, stone: 6, sand: 2, farm: 1 };
+const BLK = ['wood', 'stone', 'sand', 'farm'], BLKN = { wood: 'Madeira', stone: 'Pedra', sand: 'Areia', farm: 'Plantação' };
+const bgeo = new T.BoxGeometry(G, G, G), fgeo = new T.BoxGeometry(G, 0.6, G), bmat = {};
+for (const k in BC) bmat[k] = L(BC[k]);
+const blocks = new Map(); // dono (owner) já guardado em cada bloco: base para multiplayer/clãs
+const ck = (x, y, z) => x + ',' + y + ',' + z;
+const base = (ix, iz) => walkable(ix * G, iz * G) >= 3 ? 3 : 1.2;
+function cropVis(b) { const k = Math.min(1, b.age / FARM_T), c = b.mesh.crop; c.scale.y = 0.1 + 0.9 * k; c.position.y = 0.6 + 1.5 * c.scale.y; c.material.color.set(k >= 1 ? 0xe6c14a : 0x5fbf3a); }
+function addBlock(ix, iy, iz, type, owner, age = 0) {
+  let m;
+  if (type === 'farm') {
+    m = new T.Group(); const so = new T.Mesh(fgeo, bmat.farm); so.position.y = 0.3;
+    m.crop = new T.Mesh(new T.BoxGeometry(3, 3, 3), L(0x5fbf3a)); m.add(so, m.crop); m.position.set(ix * G, base(ix, iz), iz * G);
+  } else { m = new T.Mesh(bgeo, bmat[type]); m.position.set(ix * G, base(ix, iz) + iy * G + G / 2, iz * G); }
+  scene.add(m);
+  const b = { ix, iy, iz, type, owner, hp: BHP[type], mesh: m, age }; blocks.set(ck(ix, iy, iz), b);
+  if (type === 'farm') cropVis(b);
+  return b;
+}
+function solidAt(x, z) { const ix = Math.round(x / G), iz = Math.round(z / G); for (let y = 0; y < 2; y++) { const b = blocks.get(ck(ix, y, iz)); if (b && b.type !== 'farm') return true; } return false; }
+setInterval(() => { for (const b of blocks.values()) if (b.type === 'farm' && b.age < FARM_T) { b.age++; cropVis(b); } }, 1000);
+
+let mode = 0, blk = 'wood';
+const MODES = ['⛏️ Coletar', '🧱 Construir', '💥 Demolir'], ACT = ['COLETAR<br>/ CAVAR', 'COLOCAR', 'DEMOLIR'];
+function ui() {
+  document.getElementById('modeBtn').textContent = MODES[mode]; document.getElementById('act').innerHTML = ACT[mode];
+  const bb = document.getElementById('blkBtn'); bb.style.display = mode === 1 ? '' : 'none'; bb.textContent = 'Bloco: ' + BLKN[blk];
+}
+function cycleMode() { mode = (mode + 1) % 3; ui(); }
+function cycleBlk() { blk = BLK[(BLK.indexOf(blk) + 1) % BLK.length]; ui(); }
+const ghost = new T.Mesh(bgeo, new T.MeshBasicMaterial({ color: 0x66ff66, transparent: true, opacity: 0.4 })); ghost.visible = false; scene.add(ghost);
+function target() {
+  const f = player.rotation.y, ix = Math.round((player.position.x + Math.sin(f) * 6) / G), iz = Math.round((player.position.z + Math.cos(f) * 6) / G);
+  let iy = 0; while (blocks.has(ck(ix, iy, iz))) iy++;
+  return { ix, iz, iy };
+}
+function updateGhost() {
+  ghost.visible = mode > 0 && !dead; if (!ghost.visible) return;
+  const t = target(), iy = mode === 2 ? t.iy - 1 : t.iy;
+  if (iy < 0) { ghost.visible = false; return; }
+  ghost.position.set(t.ix * G, base(t.ix, t.iz) + iy * G + G / 2, t.iz * G);
+  ghost.material.color.set(mode === 2 ? 0xff9933 : (walkable(t.ix * G, t.iz * G) && t.iy < 6 ? 0x66ff66 : 0xff4444));
+}
+function place() {
+  const t = target(), gy = walkable(t.ix * G, t.iz * G);
+  if (!gy) return flash('Não dá para construir na água');
+  if (t.iy > 5) return flash('Altura máxima');
+  if (t.iy < 2 && Math.hypot(t.ix * G - player.position.x, t.iz * G - player.position.z) < 3) return flash('Você está no caminho');
+  if (blk === 'farm') {
+    if (!tools.hoe) return flash('Precisa de uma enxada (🔨 Criar)');
+    if (t.iy > 0 || gy < 3) return flash('Plantio só no chão de grama');
+  } else { if (inv[blk] < 2) return flash('Precisa de 2 ' + ITEMS[blk]); inv[blk] -= 2; }
+  addBlock(t.ix, t.iy, t.iz, blk, ME); refresh(); saveSoon();
+}
+function demolish() {
+  const t = target(), b = blocks.get(ck(t.ix, t.iy - 1, t.iz));
+  if (!b) return flash('Nada para demolir aí');
+  b.hp -= 1 + (b.type === 'wood' ? tools.axe : tools.pickaxe);
+  if (b.hp > 0) return flash('Bloco danificado (' + b.hp + ' restante)');
+  blocks.delete(ck(b.ix, b.iy, b.iz)); scene.remove(b.mesh);
+  if (b.owner === ME && b.type !== 'farm') { inv[b.type]++; refresh(); }
+  flash('Bloco destruído'); saveSoon();
+}
+
+// ---- coleta ----
+function gather() {
+  const P = player.position;
+  for (const b of blocks.values()) if (b.type === 'farm' && b.age >= FARM_T && Math.hypot(b.mesh.position.x - P.x, b.mesh.position.z - P.z) < 7) { b.age = 0; cropVis(b); return give('wheat', 1 + tools.hoe); }
   let best = null, bd = 16;
-  for (const n of nodes) { const d = Math.hypot(player.position.x - n.mesh.position.x, player.position.z - n.mesh.position.z); if (d < bd) { bd = d; best = n; } }
-  if (!best) return flash('Nada para coletar por perto');
-  if (best.type === 'wood') give('wood', 2 + (rnd() * 3 | 0));
-  else if (best.type === 'oil') give('oil');
-  else if (best.type === 'diamond') give('diamond', 1 + (rnd() * 2 | 0));
-  else { const r = rnd(); give('stone', 1 + (rnd() * 3 | 0)); if (r > 0.97) give('diamond'); else if (r > 0.88) give('gold'); else if (r > 0.55) give('coal'); }
+  for (const n of nodes) { const d = Math.hypot(P.x - n.mesh.position.x, P.z - n.mesh.position.z); if (d < bd) { bd = d; best = n; } }
+  if (!best) { if (walkable(P.x, P.z) < 3) return give('sand', 3); return flash('Nada para coletar por perto'); }
+  if (best.type === 'wood') give('wood', 1 + tools.axe);
+  else {
+    const ore = best.type === 'oil' ? 'oil' : best.type === 'diamond' ? 'diamond' : best.ore, need = NEED[ore];
+    if (tools.pickaxe < need) return flash('Precisa de picareta de ' + TIERS[need - 1][0] + ' ou melhor');
+    give(ore, ore === 'stone' ? 2 + tools.pickaxe : 1 + Math.ceil(tools.pickaxe / 2));
+  }
   scene.remove(best.mesh); if (best.extra) scene.remove(best.extra);
   nodes.splice(nodes.indexOf(best), 1);
 }
+function collect() { if (dead) return; if (mode === 0) gather(); else if (mode === 1) place(); else demolish(); }
 document.getElementById('act').addEventListener('pointerdown', e => { e.preventDefault(); collect(); });
+
+// ---- salvar (navegador) ----
+let saveT;
+function saveSoon() { clearTimeout(saveT); saveT = setTimeout(save, 800); }
+function save() { try { localStorage.setItem('vikron_save', JSON.stringify({ inv, tools, blocks: [...blocks.values()].map(b => [b.ix, b.iy, b.iz, b.type, b.owner, b.age]) })); } catch (e) {} }
+function load() {
+  try { const d = JSON.parse(localStorage.getItem('vikron_save') || 'null'); if (!d) return; Object.assign(inv, d.inv); Object.assign(tools, d.tools); d.blocks.forEach(b => addBlock(b[0], b[1], b[2], b[3], b[4], b[5])); } catch (e) {}
+}
+load(); refresh(); ui();
 
 // ================= AFOGAMENTO =================
 let dead = false, deadT = 0;
@@ -309,7 +427,8 @@ function loop() {
   if (!dead && m > 0.05) {
     if (m > 1) { ix /= m; iy /= m; }
     const nx = player.position.x + ix * CFG.speed * dt, nz = player.position.z + iy * CFG.speed * dt;
-    player.position.x = nx; player.position.z = nz;
+    if (!solidAt(nx, player.position.z)) player.position.x = nx;
+    if (!solidAt(player.position.x, nz)) player.position.z = nz;
     player.rotation.y = Math.atan2(ix, iy);
   }
   if (!dead) {
@@ -332,6 +451,7 @@ function loop() {
     s.g.rotation.y = -s.a - Math.PI / 2; s.g.rotation.z = Math.sin(t * 1.5 + i) * 0.05;
   });
   if (waterMat.map) { waterMat.map.offset.x += dt * 0.004; waterMat.map.offset.y += dt * 0.002; }
+  updateGhost();
   const tp = player.position;
   camera.position.lerp(new T.Vector3(tp.x, tp.y + 110, tp.z + 130), 0.08);
   camera.lookAt(tp.x, tp.y, tp.z);
